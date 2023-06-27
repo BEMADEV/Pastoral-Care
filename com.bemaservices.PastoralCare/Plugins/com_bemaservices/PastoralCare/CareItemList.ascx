@@ -45,7 +45,8 @@
                 <Rock:ModalAlert ID="mdGridWarning" runat="server" />
                 <div class="grid grid-panel">
                     <Rock:GridFilter ID="rFilter" runat="server" OnDisplayFilterValue="rFilter_DisplayFilterValue">
-                        <Rock:SlidingDateRangePicker ID="sdrpDateRange" runat="server" Label="Date Range" />
+                        <Rock:SlidingDateRangePicker ID="sdrpDateRange" runat="server" Label="Request Date Range" />
+                        <Rock:SlidingDateRangePicker ID="sdrpLastContactDateRange" runat="server" Label="Last Contact Date Range" />
                         <Rock:PersonPicker ID="ppPerson" runat="server" Label="Person" />
                         <Rock:PersonPicker ID="ppContactor" runat="server" Label="Requester" />
                         <Rock:RockDropDownList ID="ddlStatus" runat="server" Label="Status">
@@ -58,12 +59,12 @@
                     <Rock:Grid ID="gItems" runat="server" OnRowSelected="gItems_Edit" CssClass="js-grid-requests" AllowSorting="true" OnRowDataBound="gItems_RowDataBound" ExportSource="ColumnOutput">
                         <Columns>
                             <Rock:SelectField />
-                            <Rock:RockBoundField DataField="ContactDateTime" HeaderText="Request Date" SortExpression="CareItem.ContactDateTime" />
-                            <Rock:RockBoundField DataField="Name" HeaderText="Name" SortExpression="CareItem.PersonAlias.Person.LastName,PersonAlias.Person.NickName" />
-                            <Rock:RockBoundField DataField="ContactorName" HeaderText="Requester" SortExpression="CareItem.ContactorPersonAlias.Person.LastName,ContactorPersonAlias.Person.NickName" />
-                            <Rock:RockBoundField DataField="LastContactDate" HeaderText="Last Contact Date" SortExpression="LastContactDate" />
-                            <Rock:RockBoundField DataField="LastContactor" HeaderText="Last Contactor" />
-                            <Rock:RockBoundField DataField="LastContactNote" HeaderText="Last Contact" />
+                            <Rock:RockLiteralField ID="lContactDateTime" HeaderText="Request Date" SortExpression="CareItem.ContactDateTime" />
+                            <Rock:RockLiteralField ID="lName" HeaderText="Name" SortExpression="CareItem.PersonAlias.Person.LastName,PersonAlias.Person.NickName" />
+                            <Rock:RockLiteralField ID="lContactorName" HeaderText="Requester" SortExpression="CareItem.ContactorPersonAlias.Person.LastName,ContactorPersonAlias.Person.NickName" />
+                            <Rock:RockLiteralField ID="lLastContactDate" HeaderText="Last Contact Date" SortExpression="LastContactDate" />
+                            <Rock:RockLiteralField ID="lLastContactor" HeaderText="Last Contactor" />
+                            <Rock:RockLiteralField ID="lLastContactNote" HeaderText="Last Contact" />
                         </Columns>
                     </Rock:Grid>
                 </div>

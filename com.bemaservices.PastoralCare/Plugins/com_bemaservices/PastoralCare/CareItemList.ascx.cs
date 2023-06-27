@@ -214,6 +214,7 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
         protected void rFilter_ApplyFilterClick( object sender, EventArgs e )
         {
             rFilter.SaveUserPreference( "DateRange", "Date Range", sdrpDateRange.DelimitedValues );
+            rFilter.SaveUserPreference( "LastContactDateRange", "Last Contact Date Range", sdrpLastContactDateRange.DelimitedValues );
             int? personId = ppPerson.PersonId;
             rFilter.SaveUserPreference( "Person", "Person", personId.HasValue ? personId.Value.ToString() : string.Empty );
 
@@ -423,7 +424,26 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
 
                 if ( careTypeItem != null )
                 {
-                    int careItemId = careTypeItem.CareItem.Id;
+                    var careItem = careTypeItem.CareItem;
+
+                    var lContactDateTime = e.Row.FindControl( "lContactDateTime" ) as Literal;
+                    var lName = e.Row.FindControl( "lName" ) as Literal;
+                    var lContactorName = e.Row.FindControl( "lContactorName" ) as Literal;
+                    var lLastContactDate = e.Row.FindControl( "lLastContactDate" ) as Literal;
+                    var lLastContactNote = e.Row.FindControl( "lLastContactNote" ) as Literal;
+                    var lLastContactor = e.Row.FindControl( "lLastContactor" ) as Literal;
+
+                    lName.Text = careItem.PersonAlias.Person.FullNameReversed;
+                    lContactorName.Text = careItem.ContactorPersonAlias.Person.FullNameReversed;
+                    lContactDateTime.Text = careItem.ContactDateTime.ToShortDateTimeString() ?? "";
+
+                    var latestContact = careItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault();
+                    if(latestContact != null )
+                    {
+                        lLastContactDate.Text = latestContact.ContactDateTime.ToShortDateTimeString();
+                        lLastContactor.Text = latestContact.ContactorPersonAlias?.Person?.FullNameReversed;
+                        lLastContactNote.Text = latestContact.Description;
+                    }
 
                     if ( _deleteField != null && _deleteField.Visible )
                     {
@@ -547,6 +567,7 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
             using ( var rockContext = new RockContext() )
             {
                 sdrpDateRange.DelimitedValues = rFilter.GetUserPreference( "DateRange" );
+                sdrpLastContactDateRange.DelimitedValues = rFilter.GetUserPreference( "LastContactDateRange" );
                 var personService = new PersonService( rockContext );
                 int? personId = rFilter.GetUserPreference( "Person" ).AsIntegerOrNull();
                 if ( personId.HasValue )
@@ -621,7 +642,7 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
                             .Where( i => !i.CareItem.IsActive );
                     }
 
-                    // Filter by  Date.
+                    // Filter by Date.
                     var dateRange = SlidingDateRangePicker.CalculateDateRangeFromDelimitedValues( sdrpDateRange.DelimitedValues );
                     if ( dateRange.Start.HasValue )
                     {
@@ -631,6 +652,18 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
                     if ( dateRange.End.HasValue )
                     {
                         careTypeItems = careTypeItems.Where( i => i.CareItem.ContactDateTime <= dateRange.End.Value );
+                    }
+
+                    // Filter by Last Contact Date.
+                    var lastContactDateRange = SlidingDateRangePicker.CalculateDateRangeFromDelimitedValues( sdrpLastContactDateRange.DelimitedValues );
+                    if ( lastContactDateRange.Start.HasValue )
+                    {
+                        careTypeItems = careTypeItems.Where( i => i.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault() != null && i.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault().ContactDateTime >= lastContactDateRange.Start.Value );
+                    }
+
+                    if ( lastContactDateRange.End.HasValue )
+                    {
+                        careTypeItems = careTypeItems.Where( i => i.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault() != null && i.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault().ContactDateTime <= lastContactDateRange.End.Value );
                     }
 
                     // only communications for the selected recipient (_person)
@@ -670,9 +703,23 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
                     }
 
                     SortProperty sortProperty = gItems.SortProperty;
-                    if ( sortProperty != null && sortProperty.Property != "LastContactDate" )
+                    if ( sortProperty != null )
                     {
-                        careTypeItems = careTypeItems.Sort( sortProperty );
+                        if ( sortProperty.Property == "LastContactDate" )
+                        {
+                            if ( sortProperty.Direction == SortDirection.Descending )
+                            {
+                                careTypeItems = careTypeItems.OrderByDescending( r => r.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault() != null ? r.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault().ContactDateTime : DateTime.MinValue );
+                            }
+                            else
+                            {
+                                careTypeItems = careTypeItems.OrderBy( r => r.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault() != null ? r.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault().ContactDateTime : DateTime.MinValue );
+                            }
+                        }
+                        else
+                        {
+                            careTypeItems = careTypeItems.Sort( sortProperty );
+                        }
                     }
                     else
                     {
@@ -687,38 +734,7 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
                     gItems.ObjectList = new Dictionary<string, object>();
                     itemList.ForEach( m => gItems.ObjectList.Add( m.Id.ToString(), m ) );
                     gItems.EntityTypeId = EntityTypeCache.Get( "72352815-30F3-46FB-86C0-69AC284D9ED2".AsGuid() ).Id;
-
-                    var datasource = itemList
-                   .Select( r => new
-                   {
-                       r.Id,
-                       r.Guid,
-                       CareItemId = r.CareItem.Id,
-                       CareItemGuid = r.CareItem.Guid,
-                       PersonId = r.CareItem.PersonAlias.PersonId,
-                       Name = r.CareItem.PersonAlias.Person.FullNameReversed,
-                       ContactorPersonId = r.CareItem.ContactorPersonAlias.PersonId,
-                       ContactorName = r.CareItem.ContactorPersonAlias.Person.FullNameReversed ?? "",
-                       ContactDateTime = r.CareItem.ContactDateTime.ToShortDateTimeString() ?? "",
-                       LastContactDate = r.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault() != null ? r.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault().ContactDateTime.ToShortDateTimeString() : "",
-                       LastContactor = r.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault() != null ? r.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault().ContactorPersonAlias.Person.FullNameReversed : "",
-                       LastContactNote = r.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault() != null ? r.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault().Description : ""
-                   } )
-                  .ToList();
-
-                    if ( sortProperty != null && sortProperty.Property == "LastContactDate" )
-                    {
-                        if ( sortProperty.Direction == SortDirection.Descending )
-                        {
-                            datasource = datasource.OrderByDescending( a => a.LastContactDate ).ToList();
-                        }
-                        else
-                        {
-                            datasource = datasource.OrderBy( a => a.LastContactDate ).ToList();
-                        }
-                    }
-
-                    gItems.DataSource = datasource;
+                    gItems.SetLinqDataSource( careTypeItems.AsNoTracking() );
                     gItems.DataBind();
 
                     lCareItem.Text = String.Format( "{0} Care Items", typeSummary.Name );

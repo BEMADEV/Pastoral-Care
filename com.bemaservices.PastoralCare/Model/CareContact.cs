@@ -15,6 +15,7 @@ using Rock.UniversalSearch;
 using Rock.UniversalSearch.IndexModels;
 using Rock.Security;
 using Rock.Model;
+using Rock.Lava;
 
 namespace com.bemaservices.PastoralCare.Model
 {
@@ -47,7 +48,7 @@ namespace com.bemaservices.PastoralCare.Model
         [DataMember]
         public virtual CareItem CareItem { get; set; }
 
-        [LavaInclude]
+        [LavaVisible]
         public virtual PersonAlias ContactorPersonAlias { get; set; }
 
         public override Rock.Security.ISecured ParentAuthority

@@ -14,6 +14,7 @@ using Rock.UniversalSearch.IndexModels;
 using Rock.Security;
 using Rock.Transactions;
 using Rock;
+using Rock.Lava;
 
 namespace com.bemaservices.PastoralCare.Model
 {
@@ -52,7 +53,7 @@ namespace com.bemaservices.PastoralCare.Model
 
         #region Virtual Properties
 
-        [LavaInclude]
+        [LavaVisible]
         public virtual ICollection<CareTypeItem> CareTypeItems
         {
             get { return _careTypeItems ?? ( _careTypeItems = new Collection<CareTypeItem>() ); }
@@ -60,7 +61,7 @@ namespace com.bemaservices.PastoralCare.Model
         }
         private ICollection<CareTypeItem> _careTypeItems;
 
-        [LavaInclude]
+        [LavaVisible]
         public virtual int CareItemCount
         {
             get
@@ -76,7 +77,7 @@ namespace com.bemaservices.PastoralCare.Model
             get
             {
                 var careItemService = new CareItemService( new RockContext() );
-                var qry = careItemService.Queryable().Where( a => a.CareTypeItems.Any(cit=> cit.CareTypeId == this.Id) );
+                var qry = careItemService.Queryable().Where( a => a.CareTypeItems.Any( cit => cit.CareTypeId == this.Id ) );
                 return qry;
             }
         }
@@ -122,36 +123,15 @@ namespace com.bemaservices.PastoralCare.Model
 
             var inheritedAttributes = new List<AttributeCache>();
 
-            var entityAttributesList = new List<EntityAttributes>();
-
-            var allEntityAttributes = EntityAttributesCache.Get();
-            if ( allEntityAttributes != null )
-            {
-                List<EntityAttributes> result;
-                if ( entityTypeId != null )
-                {
-                    result = allEntityAttributes.EntityAttributesByEntityTypeId.GetValueOrNull( entityTypeId ) ?? new List<EntityAttributes>();
-                }
-                else
-                {
-                    result = allEntityAttributes.EntityAttributes.Where( a => !a.EntityTypeId.HasValue ).ToList();
-                }
-
-                entityAttributesList = result;
-            }
-
-            foreach ( var entityAttributes in entityAttributesList )
+            foreach ( var attribute in AttributeCache.AllForEntityType( entityTypeId ) )
             {
                 // group type ids exist and qualifier is for a group type id
-                if ( string.Compare( entityAttributes.EntityTypeQualifierColumn, entityTypeQualifierColumn, true ) == 0 )
+                if ( string.Compare( attribute.EntityTypeQualifierColumn, entityTypeQualifierColumn, true ) == 0 )
                 {
                     int careTypeIdValue = int.MinValue;
-                    if ( int.TryParse( entityAttributes.EntityTypeQualifierValue, out careTypeIdValue ) && careTypeIdValue == careTypeId )
+                    if ( int.TryParse( attribute.EntityTypeQualifierValue, out careTypeIdValue ) && careTypeIdValue == careTypeId )
                     {
-                        foreach ( int attributeId in entityAttributes.AttributeIds )
-                        {
-                            inheritedAttributes.Add( AttributeCache.Get( attributeId ) );
-                        }
+                        inheritedAttributes.Add( attribute );
                     }
                 }
             }

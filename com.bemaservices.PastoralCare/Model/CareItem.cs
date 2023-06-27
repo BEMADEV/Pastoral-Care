@@ -16,6 +16,7 @@ using Rock.UniversalSearch.IndexModels;
 using Rock.Security;
 using Rock.Model;
 using Rock;
+using Rock.Lava;
 
 namespace com.bemaservices.PastoralCare.Model
 {
@@ -48,13 +49,13 @@ namespace com.bemaservices.PastoralCare.Model
 
         #region Virtual Properties
 
-        [LavaInclude]
+        [LavaVisible]
         public virtual String Name
         {
             get { return PersonAlias != null ? PersonAlias.Person.FullName : ""; }
         }
 
-        [LavaInclude]
+        [LavaVisible]
         public virtual ICollection<CareTypeItem> CareTypeItems
         {
             get { return _careTypeItems ?? (_careTypeItems = new Collection<CareTypeItem>()); }
@@ -63,16 +64,24 @@ namespace com.bemaservices.PastoralCare.Model
 
         private ICollection<CareTypeItem> _careTypeItems;
 
-        [LavaInclude]
+        [LavaVisible]
         public virtual PersonAlias PersonAlias { get; set; }
 
-        [LavaInclude]
+        [LavaVisible]
         public virtual PersonAlias ContactorPersonAlias { get; set; }
 
         public virtual ICollection<CareContact> CareContacts
         {
             get { return _careContacts ?? (_careContacts = new Collection<CareContact>()); }
             set { _careContacts = value; }
+        }
+
+        public virtual CareContact LastCareContact
+        {
+            get
+            {
+                return CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault();
+            }
         }
 
         private ICollection<CareContact> _careContacts;
@@ -95,16 +104,15 @@ namespace com.bemaservices.PastoralCare.Model
             var careTypeItemEntityType = EntityTypeCache.Get(typeof(CareTypeItem));
             if (careTypeItemEntityType != null)
             {
-                foreach (var careTypeItemEntityAttributes in GetByEntity(careTypeItemEntityType.Id)
-                    .Where(a =>
-                       a.EntityTypeQualifierColumn == "CareTypeId" &&
-                       careTypeIds.Contains(a.EntityTypeQualifierValue.AsInteger())))
+                foreach( var careTypeId in careTypeIds )
                 {
-                    foreach (var attributeId in careTypeItemEntityAttributes.AttributeIds)
+                    foreach ( var careTypeItemEntityAttribute in AttributeCache
+                        .GetByEntityTypeQualifier( careTypeItemEntityType.Id, "CareItemId", careTypeId.ToString(), false )
+                        )
                     {
-                        inheritedAttributes[careTypeItemEntityAttributes.EntityTypeQualifierValue.AsInteger()].Add(
-                            AttributeCache.Get(attributeId));
+                        inheritedAttributes[careTypeId].Add( careTypeItemEntityAttribute );
                     }
+
                 }
             }
 
@@ -127,33 +135,24 @@ namespace com.bemaservices.PastoralCare.Model
         /// <returns>
         /// A list of any alternate entity Ids that should be used when loading attribute values.
         /// </returns>
+        [Obsolete( "Use GetAlternateEntityIdsByType instead." )]
+        [RockObsolete( "1.13" )]
         public override List<int> GetAlternateEntityIds( RockContext rockContext )
         {
             //
             // Find all the calendar Ids this event item is present on.
             //
-            return this.CareTypeItems.Select(c => c.Id).ToList();
+            return this.CareTypeItems.Select( c => c.Id ).ToList();
         }
 
-        private static List<EntityAttributes> GetByEntity( int? entityTypeId )
+        public override Dictionary<int, List<int>> GetAlternateEntityIdsByType( RockContext rockContext )
         {
-            var allEntityAttributes = EntityAttributesCache.Get();
-            if (allEntityAttributes != null)
+            // Return all of the EventCalendarItems on which this event item occurs.
+            var entitiesByType = new Dictionary<int, List<int>>
             {
-                List<EntityAttributes> result;
-                if (entityTypeId.HasValue)
-                {
-                    result = allEntityAttributes.EntityAttributesByEntityTypeId.GetValueOrNull(entityTypeId.Value) ?? new List<EntityAttributes>();
-                }
-                else
-                {
-                    result = allEntityAttributes.EntityAttributes.Where(a => !a.EntityTypeId.HasValue).ToList();
-                }
-
-                return result;
-            }
-
-            return new List<EntityAttributes>();
+                { EntityTypeCache.GetId( typeof(CareTypeItem) ) ?? 0, this.CareTypeItems.Select( c => c.Id ).ToList() }
+            };
+            return entitiesByType;
         }
 
         /// <summary>

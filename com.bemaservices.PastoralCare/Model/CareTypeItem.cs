@@ -7,6 +7,7 @@ using System.Runtime.Serialization;
 using Rock.Data;
 using Rock.Security;
 using com.bemaservices.PastoralCare.Model;
+using Rock.Lava;
 
 namespace com.bemaservices.PastoralCare.Model
 {
@@ -33,7 +34,7 @@ namespace com.bemaservices.PastoralCare.Model
         /// <value>
         /// The <see cref="Rock.Model.EventCalendar"/> that this EventCalendarItem is a member of.
         /// </value>
-        [LavaInclude]
+        [LavaVisible]
         public virtual CareType CareType { get; set; }
 
         /// <summary>
@@ -42,7 +43,7 @@ namespace com.bemaservices.PastoralCare.Model
         /// <value>
         /// The <see cref="Rock.Model.EventItem"/> that this EventCalendarItem is a member of.
         /// </value>
-        [LavaInclude]
+        [LavaVisible]
         public virtual CareItem CareItem { get; set; }
 
         #endregion
