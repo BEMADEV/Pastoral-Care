@@ -223,7 +223,7 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
 
                 if ( pnlEditDetails.Visible )
                 {
-                    ShowItemAttributes();
+                    ShowItemAttributes(false);
                 }
 
                 if ( dlgCareContacts.Visible )
@@ -1198,7 +1198,7 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
         /// <summary>
         /// Shows the item attributes.
         /// </summary>
-        private void ShowItemAttributes()
+        private void ShowItemAttributes(bool setValues = true)
         {
             var careItemId = hfCareItemId.ValueAsInt();
             var areUniversalAttributesLoaded = false;
@@ -1243,7 +1243,7 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
                                             Rock.Attribute.Helper.AddEditControls(
                                                 attributeCategory.Category != null ? attributeCategory.Category.Name : string.Empty,
                                                 attributeCategory.Attributes.Where( a => a.IsActive && a.EntityTypeQualifierColumn.IsNullOrWhiteSpace() ).Select( a => a.Key ).ToList(),
-                                                careTypeItem, phAttributes, BlockValidationGroup, true, new List<string>(), null );
+                                                careTypeItem, phAttributes, BlockValidationGroup, setValues, new List<string>(), null );
                                             areUniversalAttributesLoaded = true;
                                         }
                                     }
@@ -1265,7 +1265,7 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
                                         Rock.Attribute.Helper.AddEditControls(
                                             attributeCategory.Category != null ? attributeCategory.Category.Name : string.Empty,
                                             attributeCategory.Attributes.Where( a => a.IsActive && a.EntityTypeQualifierColumn.IsNotNullOrWhiteSpace() ).Select( a => a.Key ).ToList(),
-                                            careTypeItem, phAttributes, BlockValidationGroup, true, new List<string>(), null );
+                                            careTypeItem, phAttributes, BlockValidationGroup, setValues, new List<string>(), null );
                                     }
                                 }
                             }
