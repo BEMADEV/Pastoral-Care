@@ -16,11 +16,12 @@ using Rock.UniversalSearch.IndexModels;
 using Rock.Security;
 using Rock.Model;
 using Rock;
+using Rock.Lava;
 
 namespace com.bemaservices.PastoralCare.Model
 {
-    [RockDomain("BEMA Services > Care")]
-    [Table("_com_bemaservices_PastoralCare_CareItem")]
+    [RockDomain( "BEMA Services > Care" )]
+    [Table( "_com_bemaservices_PastoralCare_CareItem" )]
     [DataContract]
     public partial class CareItem : Rock.Data.Model<CareItem>, Rock.Data.IRockEntity
     {
@@ -48,30 +49,30 @@ namespace com.bemaservices.PastoralCare.Model
 
         #region Virtual Properties
 
-        [LavaInclude]
+        [LavaVisibleAttribute]
         public virtual String Name
         {
             get { return PersonAlias != null ? PersonAlias.Person.FullName : ""; }
         }
 
-        [LavaInclude]
+        [LavaVisibleAttribute]
         public virtual ICollection<CareTypeItem> CareTypeItems
         {
-            get { return _careTypeItems ?? (_careTypeItems = new Collection<CareTypeItem>()); }
+            get { return _careTypeItems ?? ( _careTypeItems = new Collection<CareTypeItem>() ); }
             set { _careTypeItems = value; }
         }
 
         private ICollection<CareTypeItem> _careTypeItems;
 
-        [LavaInclude]
+        [LavaVisibleAttribute]
         public virtual PersonAlias PersonAlias { get; set; }
 
-        [LavaInclude]
+        [LavaVisibleAttribute]
         public virtual PersonAlias ContactorPersonAlias { get; set; }
 
         public virtual ICollection<CareContact> CareContacts
         {
-            get { return _careContacts ?? (_careContacts = new Collection<CareContact>()); }
+            get { return _careContacts ?? ( _careContacts = new Collection<CareContact>() ); }
             set { _careContacts = value; }
         }
 
@@ -82,78 +83,40 @@ namespace com.bemaservices.PastoralCare.Model
         /// <returns>A list of all inherited AttributeCache objects.</returns>
         public override List<AttributeCache> GetInheritedAttributes( Rock.Data.RockContext rockContext )
         {
-            var careTypeIds = this.CareTypeItems.Select(c => c.CareTypeId).ToList();
-            if (!careTypeIds.Any())
+            var careTypeIds = this.CareTypeItems.Select( c => c.CareTypeId ).ToList();
+            if ( !careTypeIds.Any() )
             {
                 return null;
             }
 
             var inheritedAttributes = new Dictionary<int, List<AttributeCache>>();
-            careTypeIds.ForEach(c => inheritedAttributes.Add(c, new List<AttributeCache>()));
+            careTypeIds.ForEach( c => inheritedAttributes.Add( c, new List<AttributeCache>() ) );
 
 
-            var careTypeItemEntityType = EntityTypeCache.Get(typeof(CareTypeItem));
-            if (careTypeItemEntityType != null)
+            var careTypeItemEntityType = EntityTypeCache.Get( typeof( CareTypeItem ) );
+            if ( careTypeItemEntityType != null )
             {
-                foreach (var careTypeItemEntityAttributes in GetByEntity(careTypeItemEntityType.Id)
-                    .Where(a =>
-                       a.EntityTypeQualifierColumn == "CareTypeId" &&
-                       careTypeIds.Contains(a.EntityTypeQualifierValue.AsInteger())))
+                foreach ( var careTypeItemEntityAttribute in AttributeCache
+                    .AllForEntityType( careTypeItemEntityType.Id )
+                    .Where( a =>
+                        a.EntityTypeQualifierColumn == "CareTypeId" &&
+                        careTypeIds.Contains( a.EntityTypeQualifierValue.AsInteger() ) ) )
                 {
-                    foreach (var attributeId in careTypeItemEntityAttributes.AttributeIds)
-                    {
-                        inheritedAttributes[careTypeItemEntityAttributes.EntityTypeQualifierValue.AsInteger()].Add(
-                            AttributeCache.Get(attributeId));
-                    }
+                    inheritedAttributes[careTypeItemEntityAttribute.EntityTypeQualifierValue.AsInteger()].Add(
+                        careTypeItemEntityAttribute );
                 }
             }
 
             var attributes = new List<AttributeCache>();
-            foreach (var attributeGroup in inheritedAttributes)
+            foreach ( var attributeGroup in inheritedAttributes )
             {
-                foreach (var attribute in attributeGroup.Value.OrderBy(a => a.Order))
+                foreach ( var attribute in attributeGroup.Value.OrderBy( a => a.Order ) )
                 {
-                    attributes.Add(attribute);
+                    attributes.Add( attribute );
                 }
             }
 
             return attributes;
-        }
-
-        /// <summary>
-        /// Get any alternate Ids that should be used when loading attribute value for this entity.
-        /// </summary>
-        /// <param name="rockContext"></param>
-        /// <returns>
-        /// A list of any alternate entity Ids that should be used when loading attribute values.
-        /// </returns>
-        public override List<int> GetAlternateEntityIds( RockContext rockContext )
-        {
-            //
-            // Find all the calendar Ids this event item is present on.
-            //
-            return this.CareTypeItems.Select(c => c.Id).ToList();
-        }
-
-        private static List<EntityAttributes> GetByEntity( int? entityTypeId )
-        {
-            var allEntityAttributes = EntityAttributesCache.Get();
-            if (allEntityAttributes != null)
-            {
-                List<EntityAttributes> result;
-                if (entityTypeId.HasValue)
-                {
-                    result = allEntityAttributes.EntityAttributesByEntityTypeId.GetValueOrNull(entityTypeId.Value) ?? new List<EntityAttributes>();
-                }
-                else
-                {
-                    result = allEntityAttributes.EntityAttributes.Where(a => !a.EntityTypeId.HasValue).ToList();
-                }
-
-                return result;
-            }
-
-            return new List<EntityAttributes>();
         }
 
         /// <summary>
@@ -163,12 +126,12 @@ namespace com.bemaservices.PastoralCare.Model
         {
             get
             {
-                if (_supportedActions == null)
+                if ( _supportedActions == null )
                 {
                     _supportedActions = new Dictionary<string, string>();
-                    _supportedActions.Add(Authorization.VIEW, "The roles and/or users that have access to view.");
-                    _supportedActions.Add(Authorization.EDIT, "The roles and/or users that have access to edit.");
-                    _supportedActions.Add(Authorization.ADMINISTRATE, "The roles and/or users that have access to administrate.");
+                    _supportedActions.Add( Authorization.VIEW, "The roles and/or users that have access to view." );
+                    _supportedActions.Add( Authorization.EDIT, "The roles and/or users that have access to edit." );
+                    _supportedActions.Add( Authorization.ADMINISTRATE, "The roles and/or users that have access to administrate." );
                 }
 
                 return _supportedActions;
@@ -207,7 +170,7 @@ namespace com.bemaservices.PastoralCare.Model
         public CareItemConfiguration()
         {
             // IMPORTANT!!
-            this.HasEntitySetName("CareItem");
+            this.HasEntitySetName( "CareItem" );
         }
     }
 
