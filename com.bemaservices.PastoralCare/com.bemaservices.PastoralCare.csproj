@@ -72,7 +72,8 @@
     <Compile Include="Attribute\CareItemFieldAttribute.cs" />
     <Compile Include="Field\Types\CareTypesFieldType.cs" />
     <Compile Include="Field\Types\CareItemFieldType.cs" />
-    <Compile Include="Migrations\07_AddWorkflowActions.cs" />
+    <Compile Include="Migrations\008_InactiveColumnFix.cs" />
+    <Compile Include="Migrations\007_AddWorkflowActions.cs" />
     <Compile Include="Migrations\006_FixSharedAttributeIssue.cs" />
     <Compile Include="Migrations\005_AddInactiveColumn.cs" />
     <Compile Include="Migrations\004_AddCareItemTypes.cs" />

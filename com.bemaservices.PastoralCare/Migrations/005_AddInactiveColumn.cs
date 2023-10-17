@@ -8,8 +8,17 @@ namespace com.bemaservices.PastoralCare.Migrations
         public override void Up()
         {
             Sql( @"
-                ALTER TABLE [dbo].[_com_bemaservices_PastoralCare_CareItem] ADD [IsActive] BIT
-                    " );
+                ALTER TABLE [dbo].[_com_bemaservices_PastoralCare_CareItem] ADD [IsActive] BIT NULL
+            " );
+
+            Sql( @"
+            Update [_com_bemaservices_PastoralCare_CareItem]
+            Set IsActive = 1
+                " );
+
+            Sql( @"
+                ALTER TABLE [dbo].[_com_bemaservices_PastoralCare_CareItem] ALTER COLUMN [IsActive] BIT NOT NULL
+                " );
 
             // Page: Care Contact Attributes
             RockMigrationHelper.AddPage("FC1531F6-5A3C-4F05-8E92-B2B66688B492","D65F783D-87A9-4CC9-8110-E83466A0EADB","Shared Care Contact Attributes","","7BB3E53B-5C42-448F-A5D2-3BBD32A218EB",""); // Site:Rock RMS
