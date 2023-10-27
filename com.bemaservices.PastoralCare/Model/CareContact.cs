@@ -48,7 +48,7 @@ namespace com.bemaservices.PastoralCare.Model
         [DataMember]
         public virtual CareItem CareItem { get; set; }
 
-        [LavaVisible]
+        [LavaVisibleAttribute]
         public virtual PersonAlias ContactorPersonAlias { get; set; }
 
         public override Rock.Security.ISecured ParentAuthority

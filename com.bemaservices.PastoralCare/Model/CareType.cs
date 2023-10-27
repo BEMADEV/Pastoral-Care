@@ -53,7 +53,7 @@ namespace com.bemaservices.PastoralCare.Model
 
         #region Virtual Properties
 
-        [LavaVisible]
+        [LavaVisibleAttribute]
         public virtual ICollection<CareTypeItem> CareTypeItems
         {
             get { return _careTypeItems ?? ( _careTypeItems = new Collection<CareTypeItem>() ); }
@@ -61,7 +61,7 @@ namespace com.bemaservices.PastoralCare.Model
         }
         private ICollection<CareTypeItem> _careTypeItems;
 
-        [LavaVisible]
+        [LavaVisibleAttribute]
         public virtual int CareItemCount
         {
             get
@@ -121,22 +121,24 @@ namespace com.bemaservices.PastoralCare.Model
         {
             var careTypeId = this.Id;
 
-            var inheritedAttributes = new List<AttributeCache>();
-
-            foreach ( var attribute in AttributeCache.AllForEntityType( entityTypeId ) )
+            var attributes = new List<AttributeCache>();
+            //
+            // Walk each group type and generate a list of matching attributes.
+            //
+            foreach ( var entityAttribute in AttributeCache.AllForEntityType( entityTypeId ) )
             {
                 // group type ids exist and qualifier is for a group type id
-                if ( string.Compare( attribute.EntityTypeQualifierColumn, entityTypeQualifierColumn, true ) == 0 )
+                if ( string.Compare( entityAttribute.EntityTypeQualifierColumn, entityTypeQualifierColumn, true ) == 0 )
                 {
                     int careTypeIdValue = int.MinValue;
-                    if ( int.TryParse( attribute.EntityTypeQualifierValue, out careTypeIdValue ) && careTypeIdValue == careTypeId )
+                    if ( int.TryParse( entityAttribute.EntityTypeQualifierValue, out careTypeIdValue ) && careTypeIdValue == careTypeId )
                     {
-                        inheritedAttributes.Add( attribute );
+                        attributes.Add( entityAttribute );
                     }
                 }
             }
 
-            return inheritedAttributes.OrderBy( a => a.Order ).ToList();
+            return attributes.OrderBy( a => a.Order ).ToList();
         }
 
         /// <summary>

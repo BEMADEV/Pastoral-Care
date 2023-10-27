@@ -34,7 +34,7 @@ namespace com.bemaservices.PastoralCare.Model
         /// <value>
         /// The <see cref="Rock.Model.EventCalendar"/> that this EventCalendarItem is a member of.
         /// </value>
-        [LavaVisible]
+        [LavaVisibleAttribute]
         public virtual CareType CareType { get; set; }
 
         /// <summary>
@@ -43,7 +43,7 @@ namespace com.bemaservices.PastoralCare.Model
         /// <value>
         /// The <see cref="Rock.Model.EventItem"/> that this EventCalendarItem is a member of.
         /// </value>
-        [LavaVisible]
+        [LavaVisibleAttribute]
         public virtual CareItem CareItem { get; set; }
 
         #endregion
