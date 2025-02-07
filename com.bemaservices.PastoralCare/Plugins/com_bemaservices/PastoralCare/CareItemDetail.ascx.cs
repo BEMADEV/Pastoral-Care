@@ -54,7 +54,7 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
     [BooleanField("Allow Requester Self Selection", "Allows the person filling out the form to select themselves as the requestor", false,"",2)]
 
 
-    public partial class CareItemDetail : PersonBlock, IDetailBlock, ICustomGridColumns
+    public partial class CareItemDetail : PersonBlock, ICustomGridColumns
     {
         #region Properties
         public int? _careTypeId = null;

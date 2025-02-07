@@ -125,10 +125,11 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
 
             if ( !Page.IsPostBack )
             {
-                SelectedTypeId = GetUserPreference( SELECTED_TYPE_SETTING ).AsIntegerOrNull();
+                var preferences = GetBlockPersonPreferences();
+                SelectedTypeId = preferences.GetValue( SELECTED_TYPE_SETTING ).AsIntegerOrNull();
 
                 // Reset the state filter on every initial request to be Active and Past Due future follow up
-                rFilter.SaveUserPreference( "State", "State", "0;-2" );
+                rFilter.SetFilterPreference( "State", "State", "0;-2" );
 
                 GetSummaryData();
 
@@ -185,7 +186,9 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
         protected void rptCareTypes_ItemCommand( object source, RepeaterCommandEventArgs e )
         {
             string selectedTypeValue = e.CommandArgument.ToString();
-            SetUserPreference( SELECTED_TYPE_SETTING, selectedTypeValue );
+            var preferences = GetBlockPersonPreferences();
+            preferences.SetValue( SELECTED_TYPE_SETTING, selectedTypeValue );
+            preferences.Save();
 
             SelectedTypeId = selectedTypeValue.AsIntegerOrNull();
 
@@ -213,14 +216,14 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
         /// <param name="e">The <see cref="EventArgs" /> instance containing the event data.</param>
         protected void rFilter_ApplyFilterClick( object sender, EventArgs e )
         {
-            rFilter.SaveUserPreference( "DateRange", "Date Range", sdrpDateRange.DelimitedValues );
-            rFilter.SaveUserPreference( "LastContactDateRange", "Last Contact Date Range", sdrpLastContactDateRange.DelimitedValues );
+            rFilter.SetFilterPreference( "DateRange", "Date Range", sdrpDateRange.DelimitedValues );
+            rFilter.SetFilterPreference( "LastContactDateRange", "Last Contact Date Range", sdrpLastContactDateRange.DelimitedValues );
             int? personId = ppPerson.PersonId;
-            rFilter.SaveUserPreference( "Person", "Person", personId.HasValue ? personId.Value.ToString() : string.Empty );
+            rFilter.SetFilterPreference( "Person", "Person", personId.HasValue ? personId.Value.ToString() : string.Empty );
 
             personId = ppContactor.PersonId;
-            rFilter.SaveUserPreference( "Contactor", "Contactor", personId.HasValue ? personId.Value.ToString() : string.Empty );
-            rFilter.SaveUserPreference( "Status", "Status", ddlStatus.SelectedValue );
+            rFilter.SetFilterPreference( "Contactor", "Contactor", personId.HasValue ? personId.Value.ToString() : string.Empty );
+            rFilter.SetFilterPreference( "Status", "Status", ddlStatus.SelectedValue );
 
             if ( AvailableAttributes != null )
             {
@@ -232,7 +235,7 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
                         try
                         {
                             var values = attribute.FieldType.Field.GetFilterValues( filterControl, attribute.QualifierValues, Rock.Reporting.FilterMode.SimpleFilter );
-                            rFilter.SaveUserPreference( attribute.Key, attribute.Name, attribute.FieldType.Field.GetFilterValues( filterControl, attribute.QualifierValues, Rock.Reporting.FilterMode.SimpleFilter ).ToJson() );
+                            rFilter.SetFilterPreference( attribute.Key, attribute.Name, attribute.FieldType.Field.GetFilterValues( filterControl, attribute.QualifierValues, Rock.Reporting.FilterMode.SimpleFilter ).ToJson() );
                         }
                         catch
                         {
@@ -242,7 +245,7 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
                     else
                     {
                         // no filter control, so clear out the user preference
-                        rFilter.SaveUserPreference( attribute.Key, attribute.Name, null );
+                        rFilter.SetFilterPreference( attribute.Key, attribute.Name, null );
                     }
                 }
             }
@@ -566,10 +569,10 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
         {
             using ( var rockContext = new RockContext() )
             {
-                sdrpDateRange.DelimitedValues = rFilter.GetUserPreference( "DateRange" );
-                sdrpLastContactDateRange.DelimitedValues = rFilter.GetUserPreference( "LastContactDateRange" );
+                sdrpDateRange.DelimitedValues = rFilter.GetFilterPreference( "DateRange" );
+                sdrpLastContactDateRange.DelimitedValues = rFilter.GetFilterPreference( "LastContactDateRange" );
                 var personService = new PersonService( rockContext );
-                int? personId = rFilter.GetUserPreference( "Person" ).AsIntegerOrNull();
+                int? personId = rFilter.GetFilterPreference( "Person" ).AsIntegerOrNull();
                 if ( personId.HasValue )
                 {
                     ppPerson.SetValue( personService.Get( personId.Value ) );
@@ -578,12 +581,12 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
                 rFilter.AdditionalFilterDisplay.Clear();
 
                 ppContactor.Visible = true;
-                personId = rFilter.GetUserPreference( "Contactor" ).AsIntegerOrNull();
+                personId = rFilter.GetFilterPreference( "Contactor" ).AsIntegerOrNull();
                 if ( personId.HasValue )
                 {
                     ppContactor.SetValue( personService.Get( personId.Value ) );
                 }
-                ddlStatus.SetValue( rFilter.GetUserPreference( "Status" ) );
+                ddlStatus.SetValue( rFilter.GetFilterPreference( "Status" ) );
 
             }
 
@@ -780,7 +783,7 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
                             phAttributeFilters.Controls.Add( wrapper );
                         }
 
-                        string savedValue = rFilter.GetUserPreference( attribute.Key );
+                        string savedValue = rFilter.GetFilterPreference( attribute.Key );
                         if ( !string.IsNullOrWhiteSpace( savedValue ) )
                         {
                             try

@@ -42,7 +42,7 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
     [DisplayName( "Care Type Detail" )]
     [Category( "BEMA Services > Pastoral Care" )]
     [Description( "Displays the details of the given Care Type for editing." )]
-    public partial class CareTypeDetail : RockBlock, IDetailBlock
+    public partial class CareTypeDetail : RockBlock
     {
         #region Properties
 
