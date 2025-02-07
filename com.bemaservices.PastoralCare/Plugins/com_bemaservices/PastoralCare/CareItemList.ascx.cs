@@ -47,11 +47,34 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
     [ContextAware]
     [LinkedPage( "Configuration Page", "Page used to modify and create connection careTypes.", false, "", "", 0 )]
     [LinkedPage( "Detail Page", "Page used to view details of an careItems.", true, "", "", 1 )]
+    [BooleanField(
+        "Hide Inactive Requests By Default",
+        Key = AttributeKey.ACTIVE_BY_DEFAULT_KEY,
+        Description = "If this is enabled, inactive requests will be hidden from the list by default. If a user wants them to be shown the filter can be set to \"All\" or \"Inactive\", but it will reset to \"Active\" the next full page load.",
+        DefaultValue = "False",
+        Order = 2
+    )]
 
     public partial class CareItemList : Rock.Web.UI.RockBlock, ICustomGridColumns
     {
+        #region Keys
+        /// <summary>
+        /// Attribute Keys
+        /// </summary>
+        private static class AttributeKey
+        {
+            /// <summary>
+            /// The "Hide Inactive Requests By Default" attribute key
+            /// </summary>
+            public const string ACTIVE_BY_DEFAULT_KEY = "HideInactiveRequestsByDefault";
+        }
+
+        #endregion Keys
+
+
         #region Fields
         private const string SELECTED_TYPE_SETTING = "MyCareTypes_SelectedType";
+
         DateTime _midnightToday = RockDateTime.Today.AddDays( 1 );
         // cache the DeleteField and ColumnIndex since it could get called many times in GridRowDataBound
         private DeleteField _deleteField = null;
@@ -130,6 +153,13 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
 
                 // Reset the state filter on every initial request to be Active and Past Due future follow up
                 rFilter.SetFilterPreference( "State", "State", "0;-2" );
+
+                // If we're hiding inactive requests by default, set the filter to "Active" to show current state
+                var hideInactiveByDefault = GetAttributeValue( AttributeKey.ACTIVE_BY_DEFAULT_KEY ).AsBooleanOrNull();
+                if ( hideInactiveByDefault == true )
+                {
+                    rFilter.SaveUserPreference( "Status", "Status", "Active" );
+                }
 
                 GetSummaryData();
 
@@ -634,15 +664,27 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
 
                     // Filter by Status
                     string statusFilter = ddlStatus.SelectedValue;
-                    if ( statusFilter == "Active" )
+
+                    var hideInactiveByDefault = GetAttributeValue( AttributeKey.ACTIVE_BY_DEFAULT_KEY ).AsBooleanOrNull();
+                    if ( hideInactiveByDefault == true && !IsPostBack )
                     {
+
                         careTypeItems = careTypeItems
                             .Where( i => i.CareItem.IsActive );
-                    }
-                    else if ( statusFilter == "Inactive" )
-                    {
-                        careTypeItems = careTypeItems
-                            .Where( i => !i.CareItem.IsActive );
+
+                    } else {
+
+                        if ( statusFilter == "Active" )
+                        {
+                            careTypeItems = careTypeItems
+                                .Where( i => i.CareItem.IsActive );
+                        }
+                        else if ( statusFilter == "Inactive" )
+                        {
+                            careTypeItems = careTypeItems
+                                .Where( i => !i.CareItem.IsActive );
+                        }
+
                     }
 
                     // Filter by Date.
