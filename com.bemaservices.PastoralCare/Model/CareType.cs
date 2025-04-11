@@ -77,7 +77,7 @@ namespace com.bemaservices.PastoralCare.Model
             get
             {
                 var careItemService = new CareItemService( new RockContext() );
-                var qry = careItemService.Queryable().Where( a => a.CareTypeItems.Any(cit=> cit.CareTypeId == this.Id) );
+                var qry = careItemService.Queryable().Where( a => a.CareTypeItems.Any( cit => cit.CareTypeId == this.Id ) );
                 return qry;
             }
         }

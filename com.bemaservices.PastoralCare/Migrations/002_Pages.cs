@@ -71,7 +71,7 @@ namespace com.bemaservices.PastoralCare.Migrations
 
             // Page: Pastoral Care
             RockMigrationHelper.AddPage( "BF04BB7E-BE3A-4A38-A37C-386B55496303", "F66758C6-3E3D-4598-AF4C-B317047B5987", "Pastoral Care", "", "DF6EAFC1-F139-4BF4-9249-DF146C14F93D", "" ); // Site:Rock RMS
-            RockMigrationHelper.AddPageRoute( "DF6EAFC1-F139-4BF4-9249-DF146C14F93D", "Person/{PersonId}/PastoralCare" );
+            RockMigrationHelper.AddOrUpdatePageRoute( "DF6EAFC1-F139-4BF4-9249-DF146C14F93D", "Person/{PersonId}/PastoralCare" );
             RockMigrationHelper.UpdateBlockType( "Care Item List", "Block to display the connection opportunities that user is authorized to view, and the opportunities that are currently assigned to the user.", "~/Plugins/com_bemaservices/PastoralCare/CareItemList.ascx", "BEMA Services > Pastoral Care", "A7A6FFAB-FD70-4BDB-8948-CAE86727BE7A" );
             // Add Block to Page: Pastoral Care, Site: Rock RMS
             RockMigrationHelper.AddBlock( true, "DF6EAFC1-F139-4BF4-9249-DF146C14F93D", "", "A7A6FFAB-FD70-4BDB-8948-CAE86727BE7A", "Care Item List", "SectionC1", "", "", 0, "F94C50E0-1E98-4F8B-9F39-6D052582DBC5" );

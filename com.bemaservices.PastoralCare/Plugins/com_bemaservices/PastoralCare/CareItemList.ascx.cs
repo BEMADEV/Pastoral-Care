@@ -47,11 +47,34 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
     [ContextAware]
     [LinkedPage( "Configuration Page", "Page used to modify and create connection careTypes.", false, "", "", 0 )]
     [LinkedPage( "Detail Page", "Page used to view details of an careItems.", true, "", "", 1 )]
+    [BooleanField(
+        "Hide Inactive Requests By Default",
+        Key = AttributeKey.ACTIVE_BY_DEFAULT_KEY,
+        Description = "If this is enabled, inactive requests will be hidden from the list by default. If a user wants them to be shown the filter can be set to \"All\" or \"Inactive\", but it will reset to \"Active\" the next full page load.",
+        DefaultValue = "False",
+        Order = 2
+    )]
 
     public partial class CareItemList : Rock.Web.UI.RockBlock, ICustomGridColumns
     {
+        #region Keys
+        /// <summary>
+        /// Attribute Keys
+        /// </summary>
+        private static class AttributeKey
+        {
+            /// <summary>
+            /// The "Hide Inactive Requests By Default" attribute key
+            /// </summary>
+            public const string ACTIVE_BY_DEFAULT_KEY = "HideInactiveRequestsByDefault";
+        }
+
+        #endregion Keys
+
+
         #region Fields
         private const string SELECTED_TYPE_SETTING = "MyCareTypes_SelectedType";
+
         DateTime _midnightToday = RockDateTime.Today.AddDays( 1 );
         // cache the DeleteField and ColumnIndex since it could get called many times in GridRowDataBound
         private DeleteField _deleteField = null;
@@ -125,10 +148,18 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
 
             if ( !Page.IsPostBack )
             {
-                SelectedTypeId = GetUserPreference( SELECTED_TYPE_SETTING ).AsIntegerOrNull();
+                var preferences = GetBlockPersonPreferences();
+                SelectedTypeId = preferences.GetValue( SELECTED_TYPE_SETTING ).AsIntegerOrNull();
 
                 // Reset the state filter on every initial request to be Active and Past Due future follow up
-                rFilter.SaveUserPreference( "State", "State", "0;-2" );
+                rFilter.SetFilterPreference( "State", "State", "0;-2" );
+
+                // If we're hiding inactive requests by default, set the filter to "Active" to show current state
+                var hideInactiveByDefault = GetAttributeValue( AttributeKey.ACTIVE_BY_DEFAULT_KEY ).AsBooleanOrNull();
+                if ( hideInactiveByDefault == true )
+                {
+                    rFilter.SaveUserPreference( "Status", "Status", "Active" );
+                }
 
                 GetSummaryData();
 
@@ -185,7 +216,9 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
         protected void rptCareTypes_ItemCommand( object source, RepeaterCommandEventArgs e )
         {
             string selectedTypeValue = e.CommandArgument.ToString();
-            SetUserPreference( SELECTED_TYPE_SETTING, selectedTypeValue );
+            var preferences = GetBlockPersonPreferences();
+            preferences.SetValue( SELECTED_TYPE_SETTING, selectedTypeValue );
+            preferences.Save();
 
             SelectedTypeId = selectedTypeValue.AsIntegerOrNull();
 
@@ -213,13 +246,14 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
         /// <param name="e">The <see cref="EventArgs" /> instance containing the event data.</param>
         protected void rFilter_ApplyFilterClick( object sender, EventArgs e )
         {
-            rFilter.SaveUserPreference( "DateRange", "Date Range", sdrpDateRange.DelimitedValues );
+            rFilter.SetFilterPreference( "DateRange", "Date Range", sdrpDateRange.DelimitedValues );
+            rFilter.SetFilterPreference( "LastContactDateRange", "Last Contact Date Range", sdrpLastContactDateRange.DelimitedValues );
             int? personId = ppPerson.PersonId;
-            rFilter.SaveUserPreference( "Person", "Person", personId.HasValue ? personId.Value.ToString() : string.Empty );
+            rFilter.SetFilterPreference( "Person", "Person", personId.HasValue ? personId.Value.ToString() : string.Empty );
 
             personId = ppContactor.PersonId;
-            rFilter.SaveUserPreference( "Contactor", "Contactor", personId.HasValue ? personId.Value.ToString() : string.Empty );
-            rFilter.SaveUserPreference( "Status", "Status", ddlStatus.SelectedValue );
+            rFilter.SetFilterPreference( "Contactor", "Contactor", personId.HasValue ? personId.Value.ToString() : string.Empty );
+            rFilter.SetFilterPreference( "Status", "Status", ddlStatus.SelectedValue );
 
             if ( AvailableAttributes != null )
             {
@@ -231,7 +265,7 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
                         try
                         {
                             var values = attribute.FieldType.Field.GetFilterValues( filterControl, attribute.QualifierValues, Rock.Reporting.FilterMode.SimpleFilter );
-                            rFilter.SaveUserPreference( attribute.Key, attribute.Name, attribute.FieldType.Field.GetFilterValues( filterControl, attribute.QualifierValues, Rock.Reporting.FilterMode.SimpleFilter ).ToJson() );
+                            rFilter.SetFilterPreference( attribute.Key, attribute.Name, attribute.FieldType.Field.GetFilterValues( filterControl, attribute.QualifierValues, Rock.Reporting.FilterMode.SimpleFilter ).ToJson() );
                         }
                         catch
                         {
@@ -241,7 +275,7 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
                     else
                     {
                         // no filter control, so clear out the user preference
-                        rFilter.SaveUserPreference( attribute.Key, attribute.Name, null );
+                        rFilter.SetFilterPreference( attribute.Key, attribute.Name, null );
                     }
                 }
             }
@@ -423,7 +457,26 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
 
                 if ( careTypeItem != null )
                 {
-                    int careItemId = careTypeItem.CareItem.Id;
+                    var careItem = careTypeItem.CareItem;
+
+                    var lContactDateTime = e.Row.FindControl( "lContactDateTime" ) as Literal;
+                    var lName = e.Row.FindControl( "lName" ) as Literal;
+                    var lContactorName = e.Row.FindControl( "lContactorName" ) as Literal;
+                    var lLastContactDate = e.Row.FindControl( "lLastContactDate" ) as Literal;
+                    var lLastContactNote = e.Row.FindControl( "lLastContactNote" ) as Literal;
+                    var lLastContactor = e.Row.FindControl( "lLastContactor" ) as Literal;
+
+                    lName.Text = careItem.PersonAlias.Person.FullNameReversed;
+                    lContactorName.Text = careItem.ContactorPersonAlias.Person.FullNameReversed;
+                    lContactDateTime.Text = careItem.ContactDateTime.ToShortDateTimeString() ?? "";
+
+                    var latestContact = careItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault();
+                    if(latestContact != null )
+                    {
+                        lLastContactDate.Text = latestContact.ContactDateTime.ToShortDateTimeString();
+                        lLastContactor.Text = latestContact.ContactorPersonAlias?.Person?.FullNameReversed;
+                        lLastContactNote.Text = latestContact.Description;
+                    }
 
                     if ( _deleteField != null && _deleteField.Visible )
                     {
@@ -546,9 +599,10 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
         {
             using ( var rockContext = new RockContext() )
             {
-                sdrpDateRange.DelimitedValues = rFilter.GetUserPreference( "DateRange" );
+                sdrpDateRange.DelimitedValues = rFilter.GetFilterPreference( "DateRange" );
+                sdrpLastContactDateRange.DelimitedValues = rFilter.GetFilterPreference( "LastContactDateRange" );
                 var personService = new PersonService( rockContext );
-                int? personId = rFilter.GetUserPreference( "Person" ).AsIntegerOrNull();
+                int? personId = rFilter.GetFilterPreference( "Person" ).AsIntegerOrNull();
                 if ( personId.HasValue )
                 {
                     ppPerson.SetValue( personService.Get( personId.Value ) );
@@ -557,12 +611,12 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
                 rFilter.AdditionalFilterDisplay.Clear();
 
                 ppContactor.Visible = true;
-                personId = rFilter.GetUserPreference( "Contactor" ).AsIntegerOrNull();
+                personId = rFilter.GetFilterPreference( "Contactor" ).AsIntegerOrNull();
                 if ( personId.HasValue )
                 {
                     ppContactor.SetValue( personService.Get( personId.Value ) );
                 }
-                ddlStatus.SetValue( rFilter.GetUserPreference( "Status" ) );
+                ddlStatus.SetValue( rFilter.GetFilterPreference( "Status" ) );
 
             }
 
@@ -610,18 +664,30 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
 
                     // Filter by Status
                     string statusFilter = ddlStatus.SelectedValue;
-                    if ( statusFilter == "Active" )
+
+                    var hideInactiveByDefault = GetAttributeValue( AttributeKey.ACTIVE_BY_DEFAULT_KEY ).AsBooleanOrNull();
+                    if ( hideInactiveByDefault == true && !IsPostBack )
                     {
+
                         careTypeItems = careTypeItems
                             .Where( i => i.CareItem.IsActive );
-                    }
-                    else if ( statusFilter == "Inactive" )
-                    {
-                        careTypeItems = careTypeItems
-                            .Where( i => !i.CareItem.IsActive );
+
+                    } else {
+
+                        if ( statusFilter == "Active" )
+                        {
+                            careTypeItems = careTypeItems
+                                .Where( i => i.CareItem.IsActive );
+                        }
+                        else if ( statusFilter == "Inactive" )
+                        {
+                            careTypeItems = careTypeItems
+                                .Where( i => !i.CareItem.IsActive );
+                        }
+
                     }
 
-                    // Filter by  Date.
+                    // Filter by Date.
                     var dateRange = SlidingDateRangePicker.CalculateDateRangeFromDelimitedValues( sdrpDateRange.DelimitedValues );
                     if ( dateRange.Start.HasValue )
                     {
@@ -631,6 +697,18 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
                     if ( dateRange.End.HasValue )
                     {
                         careTypeItems = careTypeItems.Where( i => i.CareItem.ContactDateTime <= dateRange.End.Value );
+                    }
+
+                    // Filter by Last Contact Date.
+                    var lastContactDateRange = SlidingDateRangePicker.CalculateDateRangeFromDelimitedValues( sdrpLastContactDateRange.DelimitedValues );
+                    if ( lastContactDateRange.Start.HasValue )
+                    {
+                        careTypeItems = careTypeItems.Where( i => i.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault() != null && i.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault().ContactDateTime >= lastContactDateRange.Start.Value );
+                    }
+
+                    if ( lastContactDateRange.End.HasValue )
+                    {
+                        careTypeItems = careTypeItems.Where( i => i.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault() != null && i.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault().ContactDateTime <= lastContactDateRange.End.Value );
                     }
 
                     // only communications for the selected recipient (_person)
@@ -670,9 +748,23 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
                     }
 
                     SortProperty sortProperty = gItems.SortProperty;
-                    if ( sortProperty != null && sortProperty.Property != "LastContactDate" )
+                    if ( sortProperty != null )
                     {
-                        careTypeItems = careTypeItems.Sort( sortProperty );
+                        if ( sortProperty.Property == "LastContactDate" )
+                        {
+                            if ( sortProperty.Direction == SortDirection.Descending )
+                            {
+                                careTypeItems = careTypeItems.OrderByDescending( r => r.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault() != null ? r.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault().ContactDateTime : DateTime.MinValue );
+                            }
+                            else
+                            {
+                                careTypeItems = careTypeItems.OrderBy( r => r.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault() != null ? r.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault().ContactDateTime : DateTime.MinValue );
+                            }
+                        }
+                        else
+                        {
+                            careTypeItems = careTypeItems.Sort( sortProperty );
+                        }
                     }
                     else
                     {
@@ -687,38 +779,7 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
                     gItems.ObjectList = new Dictionary<string, object>();
                     itemList.ForEach( m => gItems.ObjectList.Add( m.Id.ToString(), m ) );
                     gItems.EntityTypeId = EntityTypeCache.Get( "72352815-30F3-46FB-86C0-69AC284D9ED2".AsGuid() ).Id;
-
-                    var datasource = itemList
-                   .Select( r => new
-                   {
-                       r.Id,
-                       r.Guid,
-                       CareItemId = r.CareItem.Id,
-                       CareItemGuid = r.CareItem.Guid,
-                       PersonId = r.CareItem.PersonAlias.PersonId,
-                       Name = r.CareItem.PersonAlias.Person.FullNameReversed,
-                       ContactorPersonId = r.CareItem.ContactorPersonAlias.PersonId,
-                       ContactorName = r.CareItem.ContactorPersonAlias.Person.FullNameReversed ?? "",
-                       ContactDateTime = r.CareItem.ContactDateTime.ToShortDateTimeString() ?? "",
-                       LastContactDate = r.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault() != null ? r.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault().ContactDateTime.ToShortDateTimeString() : "",
-                       LastContactor = r.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault() != null ? r.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault().ContactorPersonAlias.Person.FullNameReversed : "",
-                       LastContactNote = r.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault() != null ? r.CareItem.CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault().Description : ""
-                   } )
-                  .ToList();
-
-                    if ( sortProperty != null && sortProperty.Property == "LastContactDate" )
-                    {
-                        if ( sortProperty.Direction == SortDirection.Descending )
-                        {
-                            datasource = datasource.OrderByDescending( a => a.LastContactDate ).ToList();
-                        }
-                        else
-                        {
-                            datasource = datasource.OrderBy( a => a.LastContactDate ).ToList();
-                        }
-                    }
-
-                    gItems.DataSource = datasource;
+                    gItems.SetLinqDataSource( careTypeItems.AsNoTracking() );
                     gItems.DataBind();
 
                     lCareItem.Text = String.Format( "{0} Care Items", typeSummary.Name );
@@ -764,7 +825,7 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
                             phAttributeFilters.Controls.Add( wrapper );
                         }
 
-                        string savedValue = rFilter.GetUserPreference( attribute.Key );
+                        string savedValue = rFilter.GetFilterPreference( attribute.Key );
                         if ( !string.IsNullOrWhiteSpace( savedValue ) )
                         {
                             try

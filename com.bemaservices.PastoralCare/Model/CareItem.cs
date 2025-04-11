@@ -76,6 +76,14 @@ namespace com.bemaservices.PastoralCare.Model
             set { _careContacts = value; }
         }
 
+        public virtual CareContact LastCareContact
+        {
+            get
+            {
+                return CareContacts.OrderByDescending( c => c.ContactDateTime ).FirstOrDefault();
+            }
+        }
+
         private ICollection<CareContact> _careContacts;
         /// <summary>
         /// Get a list of all inherited Attributes that should be applied to this entity.
