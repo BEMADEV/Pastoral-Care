@@ -158,7 +158,7 @@ namespace RockWeb.Plugins.com_bemaservices.PastoralCare
                 var hideInactiveByDefault = GetAttributeValue( AttributeKey.ACTIVE_BY_DEFAULT_KEY ).AsBooleanOrNull();
                 if ( hideInactiveByDefault == true )
                 {
-                    rFilter.SaveUserPreference( "Status", "Status", "Active" );
+                    rFilter.SetFilterPreference( "Status", "Status", "Active" );
                 }
 
                 GetSummaryData();
