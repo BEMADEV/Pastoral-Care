@@ -117,6 +117,10 @@
       <Project>{61dece2b-0434-435e-8d65-49a4fdf98365}</Project>
       <Name>Rock.Enums</Name>
     </ProjectReference>
+    <ProjectReference Include="$(SolutionDir)\Rock.ViewModels\Rock.ViewModels.csproj">
+      <Project>{05baaf85-9c53-4ccd-a535-036427b0df72}</Project>
+      <Name>Rock.ViewModels</Name>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Rest\" />
