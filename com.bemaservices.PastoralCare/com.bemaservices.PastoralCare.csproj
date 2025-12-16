@@ -90,7 +90,6 @@
     <Compile Include="Model\CareTypeItem.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Web\Cache\CareTypeCache.cs" />
-    <Compile Include="Web\UI\Controls\Pickers\CareItemPicker.cs" />
     <Compile Include="Web\UI\Controls\Pickers\CareTypesPicker.cs" />
     <Compile Include="Workflow\Action\PastoralCare\AddCareContact.cs" />
     <Compile Include="Workflow\Action\PastoralCare\AddCareItemAttribute.cs" />
