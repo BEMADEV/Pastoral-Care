@@ -1,0 +1,20 @@
+{
+  "lockFileVersion": 1,
+  "versions": [
+    {
+      "version": "1.0.6",
+      "installedFiles": [
+        "Bin/com.bemaservices.PastoralCare.dll",
+        "Plugins/com_bemaservices/PastoralCare/.gitignore",
+        "Plugins/com_bemaservices/PastoralCare/CareItemDetail.ascx",
+        "Plugins/com_bemaservices/PastoralCare/CareItemDetail.ascx.cs",
+        "Plugins/com_bemaservices/PastoralCare/CareItemList.ascx",
+        "Plugins/com_bemaservices/PastoralCare/CareItemList.ascx.cs",
+        "Plugins/com_bemaservices/PastoralCare/CareTypeDetail.ascx",
+        "Plugins/com_bemaservices/PastoralCare/CareTypeDetail.ascx.cs",
+        "Plugins/com_bemaservices/PastoralCare/CareTypeList.ascx",
+        "Plugins/com_bemaservices/PastoralCare/CareTypeList.ascx.cs"
+      ]
+    }
+  ]
+}

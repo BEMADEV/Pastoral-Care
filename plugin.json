@@ -1,0 +1,14 @@
+{
+    "organization": {
+        "name": "BEMA Software Services",
+        "code": "com.bemaservices"
+    },
+    "name": "Pastoral Care",
+    "version": "1.0.6",
+    "include": {
+        "com.bemaservices.PastoralCare/bin/Release/net472/com.bemaservices.PastoralCare.dll": "Bin/",
+        "com.bemaservices.PastoralCare.Obsidian/dist/**": "Plugins/com_bemaservices/PastoralCare",
+        "WebForms/**": "Plugins/com_bemaservices/PastoralCare"
+    },
+    "exclude": []
+}
