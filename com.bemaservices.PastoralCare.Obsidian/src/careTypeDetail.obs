@@ -1,0 +1,284 @@
+<template>
+    <NotificationBox v-if="errorMessage" alertType="danger">{{ errorMessage }}</NotificationBox>
+
+    <div class="panel panel-block">
+        <div class="panel-heading">
+            <h1 class="panel-title">{{ title }}</h1>
+        </div>
+        <div class="panel-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <TextBox v-model="entity.name" label="Name" rules="required" :disabled="!config.isEditable" />
+                </div>
+                <div class="col-md-6">
+                    <CheckBox v-model="entity.isActive" label="Active" :disabled="!config.isEditable" />
+                </div>
+            </div>
+
+            <TextBox v-model="entity.description" label="Description" textMode="multiline" :disabled="!config.isEditable" />
+
+            <fieldset class="mt-3" v-if="entity.id > 0">
+                <legend>Care Item Attributes</legend>
+                <div class="mb-2">
+                    <button type="button" class="btn btn-default btn-sm" :disabled="!config.isEditable" @click="onAddAttribute">Add Attribute</button>
+                </div>
+                <table class="table table-condensed">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Key</th>
+                            <th>Field Type</th>
+                            <th class="text-center">Required</th>
+                            <th class="text-center">Grid</th>
+                            <th class="text-center">Search</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="attribute in attributes" :key="attribute.guid">
+                            <td>{{ attribute.name }}</td>
+                            <td>{{ attribute.key }}</td>
+                            <td>{{ attribute.fieldTypeName }}</td>
+                            <td class="text-center">{{ attribute.isRequired ? "Yes" : "No" }}</td>
+                            <td class="text-center">{{ attribute.isGridColumn ? "Yes" : "No" }}</td>
+                            <td class="text-center">{{ attribute.allowSearch ? "Yes" : "No" }}</td>
+                            <td class="text-right">
+                                <button type="button" class="btn btn-xs btn-default" :disabled="!config.isEditable" @click="onEditAttribute(attribute)">Edit</button>
+                                <button type="button" class="btn btn-xs btn-danger" :disabled="!config.isEditable" @click="onDeleteAttribute(attribute)">Delete</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </fieldset>
+
+            <div class="actions">
+                <button type="button" class="btn btn-primary" :disabled="!config.isEditable" @click="onSave">Save</button>
+                <button type="button" class="btn btn-link" @click="onCancel">Cancel</button>
+                <button v-if="entity.id > 0" type="button" class="btn btn-default" :disabled="!config.isEditable" @click="onCopy">Copy</button>
+                <button v-if="entity.id > 0" type="button" class="btn btn-danger" :disabled="!config.isEditable" @click="onDelete">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <Modal v-model="isAttributeModalOpen"
+           title="Care Item Attribute"
+           saveText="Save"
+           @save="onSaveAttribute">
+        <TextBox v-model="activeAttribute.name" label="Name" rules="required" />
+        <TextBox v-model="activeAttribute.key" label="Key" rules="required" />
+        <TextBox v-model="activeAttribute.description" label="Description" textMode="multiline" />
+        <DropDownList v-model="activeAttribute.fieldTypeIdString"
+                      label="Field Type"
+                      rules="required"
+                      :items="fieldTypeItems" />
+        <CheckBox v-model="activeAttribute.isRequired" label="Required" />
+        <CheckBox v-model="activeAttribute.isGridColumn" label="Show In Grid" />
+        <CheckBox v-model="activeAttribute.allowSearch" label="Allow Search" />
+    </Modal>
+</template>
+
+<script setup lang="ts">
+import { computed, reactive, ref } from "vue";
+import { onConfigurationValuesChanged, useConfigurationValues, useInvokeBlockAction, useReloadBlock } from "@Obsidian/Utility/block";
+import { confirm, alert } from "@Obsidian/Utility/dialogs";
+import NotificationBox from "@Obsidian/Controls/notificationBox.obs";
+import TextBox from "@Obsidian/Controls/textBox.obs";
+import CheckBox from "@Obsidian/Controls/checkBox.obs";
+import Modal from "@Obsidian/Controls/modal.obs";
+import DropDownList from "@Obsidian/Controls/dropDownList.obs";
+
+type CareTypeBag = {
+    id: number;
+    idKey?: string;
+    name?: string;
+    description?: string;
+    isActive: boolean;
+};
+
+type BlockConfig = {
+    entity?: CareTypeBag;
+    attributes?: CareTypeAttributeBag[];
+    fieldTypes?: FieldTypeOption[];
+    isEditable?: boolean;
+    parentPageUrl?: string;
+};
+
+type CareTypeAttributeBag = {
+    guid: string;
+    name: string;
+    key: string;
+    description?: string;
+    fieldTypeId: number;
+    fieldTypeName?: string;
+    isRequired: boolean;
+    isGridColumn: boolean;
+    allowSearch: boolean;
+    order: number;
+};
+
+type FieldTypeOption = {
+    value: number;
+    text: string;
+};
+
+const config = useConfigurationValues<BlockConfig>();
+const invokeBlockAction = useInvokeBlockAction();
+
+onConfigurationValuesChanged(useReloadBlock());
+
+const errorMessage = ref("");
+const entity = reactive<CareTypeBag>({
+    id: config.entity?.id ?? 0,
+    idKey: config.entity?.idKey ?? "",
+    name: config.entity?.name ?? "",
+    description: config.entity?.description ?? "",
+    isActive: config.entity?.isActive ?? true
+});
+
+const title = computed(() => entity.id > 0 ? (entity.name || "Care Type") : "Add Care Type");
+const attributes = ref<CareTypeAttributeBag[]>(config.attributes ?? []);
+const isAttributeModalOpen = ref(false);
+const activeAttribute = reactive<{ guid: string; name: string; key: string; description: string; fieldTypeIdString: string; isRequired: boolean; isGridColumn: boolean; allowSearch: boolean; order: number }>({
+    guid: "",
+    name: "",
+    key: "",
+    description: "",
+    fieldTypeIdString: "",
+    isRequired: false,
+    isGridColumn: false,
+    allowSearch: false,
+    order: 0
+});
+
+const fieldTypeItems = computed(() => {
+    return (config.fieldTypes ?? []).map(ft => ({
+        value: ft.value.toString(),
+        text: ft.text
+    }));
+});
+
+async function onSave(): Promise<void> {
+    errorMessage.value = "";
+
+    const result = await invokeBlockAction<{ id: number; idKey: string }>("Save", { bag: entity });
+    if (!result.isSuccess || !result.data) {
+        errorMessage.value = result.errorMessage ?? "Unable to save care type.";
+        return;
+    }
+
+    if (config.parentPageUrl) {
+        window.location.href = `${window.location.pathname}?CareTypeId=${result.data.id}`;
+    }
+}
+
+function onCancel(): void {
+    if (config.parentPageUrl) {
+        window.location.href = config.parentPageUrl;
+    }
+}
+
+async function onCopy(): Promise<void> {
+    const result = await invokeBlockAction<string>("Copy", { key: entity.idKey });
+    if (result.isSuccess && result.data) {
+        window.location.href = result.data;
+    }
+    else {
+        await alert(result.errorMessage ?? "Unable to copy care type.");
+    }
+}
+
+async function onDelete(): Promise<void> {
+    const confirmed = await confirm("This will also delete all care items that reference this care type. Continue?");
+    if (!confirmed) {
+        return;
+    }
+
+    const result = await invokeBlockAction<string>("Delete", { key: entity.idKey });
+    if (result.isSuccess && result.data) {
+        window.location.href = result.data;
+    }
+    else {
+        await alert(result.errorMessage ?? "Unable to delete care type.");
+    }
+}
+
+function onAddAttribute(): void {
+    activeAttribute.guid = "";
+    activeAttribute.name = "";
+    activeAttribute.key = "";
+    activeAttribute.description = "";
+    activeAttribute.fieldTypeIdString = fieldTypeItems.value[0]?.value ?? "";
+    activeAttribute.isRequired = false;
+    activeAttribute.isGridColumn = false;
+    activeAttribute.allowSearch = false;
+    activeAttribute.order = attributes.value.length;
+    isAttributeModalOpen.value = true;
+}
+
+function onEditAttribute(attribute: CareTypeAttributeBag): void {
+    activeAttribute.guid = attribute.guid;
+    activeAttribute.name = attribute.name;
+    activeAttribute.key = attribute.key;
+    activeAttribute.description = attribute.description ?? "";
+    activeAttribute.fieldTypeIdString = attribute.fieldTypeId.toString();
+    activeAttribute.isRequired = attribute.isRequired;
+    activeAttribute.isGridColumn = attribute.isGridColumn;
+    activeAttribute.allowSearch = attribute.allowSearch;
+    activeAttribute.order = attribute.order;
+    isAttributeModalOpen.value = true;
+}
+
+async function onSaveAttribute(): Promise<void> {
+    if (!entity.idKey) {
+        await alert("Save the care type before adding attributes.");
+        isAttributeModalOpen.value = false;
+        return;
+    }
+
+    const result = await invokeBlockAction<CareTypeAttributeBag[]>("SaveAttribute", {
+        careTypeKey: entity.idKey,
+        bag: {
+            guid: activeAttribute.guid,
+            name: activeAttribute.name,
+            key: activeAttribute.key,
+            description: activeAttribute.description,
+            fieldTypeId: parseInt(activeAttribute.fieldTypeIdString),
+            isRequired: activeAttribute.isRequired,
+            isGridColumn: activeAttribute.isGridColumn,
+            allowSearch: activeAttribute.allowSearch,
+            order: activeAttribute.order
+        }
+    });
+
+    if (result.isSuccess && result.data) {
+        attributes.value = result.data;
+        isAttributeModalOpen.value = false;
+    }
+    else {
+        await alert(result.errorMessage ?? "Unable to save attribute.");
+    }
+}
+
+async function onDeleteAttribute(attribute: CareTypeAttributeBag): Promise<void> {
+    if (!entity.idKey) {
+        return;
+    }
+
+    const confirmed = await confirm(`Delete attribute '${attribute.name}'?`);
+    if (!confirmed) {
+        return;
+    }
+
+    const result = await invokeBlockAction<CareTypeAttributeBag[]>("DeleteAttribute", {
+        careTypeKey: entity.idKey,
+        attributeGuid: attribute.guid
+    });
+
+    if (result.isSuccess && result.data) {
+        attributes.value = result.data;
+    }
+    else {
+        await alert(result.errorMessage ?? "Unable to delete attribute.");
+    }
+}
+</script>

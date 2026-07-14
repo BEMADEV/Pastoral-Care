@@ -1,0 +1,99 @@
+<template>
+    <div class="panel panel-block">
+        <div class="panel-heading d-flex justify-content-between align-items-center">
+            <h1 class="panel-title">
+                <i class="fa fa-plug"></i> Care Types
+            </h1>
+            <button v-if="config.isAddEnabled"
+                    type="button"
+                    class="btn btn-action btn-xs"
+                    @click="onAddCareType">
+                <i class="fa fa-plus"></i>
+            </button>
+        </div>
+        <div class="panel-body">
+            <div class="list-as-blocks clearfix">
+                <ul class="list-unstyled">
+                    <li v-for="careType in careTypes" :key="careType.idKey">
+                        <a href="#" @click.prevent="onEditCareType(careType.id)">
+                            <h3>{{ careType.name }}</h3>
+                        </a>
+                    </li>
+                    <li v-if="config.options?.showSharedCareItemAttributes">
+                        <a href="#" @click.prevent="onSharedCareItemAttributes">
+                            <h3>Shared Care Item Attributes</h3>
+                        </a>
+                    </li>
+                    <li v-if="config.options?.showSharedCareContactAttributes">
+                        <a href="#" @click.prevent="onSharedCareContactAttributes">
+                            <h3>Shared Care Contact Attributes</h3>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</template>
+
+<script setup lang="ts">
+import { onConfigurationValuesChanged, useConfigurationValues, useInvokeBlockAction, useReloadBlock } from "@Obsidian/Utility/block";
+import { ref } from "vue";
+
+type CareTypeRow = {
+    id: number;
+    idKey: string;
+    name: string;
+    isActive: boolean;
+    canEdit: boolean;
+};
+
+type BlockConfig = {
+    isAddEnabled?: boolean;
+    options?: {
+        showSharedCareItemAttributes?: boolean;
+        showSharedCareContactAttributes?: boolean;
+    };
+    navigationUrls?: Record<string, string>;
+};
+
+const config = useConfigurationValues<BlockConfig>();
+const invokeBlockAction = useInvokeBlockAction();
+
+onConfigurationValuesChanged(useReloadBlock());
+
+const careTypes = ref<CareTypeRow[]>([]);
+
+async function loadData(): Promise<void> {
+    const result = await invokeBlockAction<CareTypeRow[]>("GetData");
+    if (result.isSuccess && result.data) {
+        careTypes.value = result.data;
+    }
+}
+
+function onAddCareType(): void {
+    onEditCareType(0);
+}
+
+function onEditCareType(careTypeId: number): void {
+    const detailUrl = config.navigationUrls?.["DetailPage"];
+    if (detailUrl) {
+        window.location.href = detailUrl.replace("((Key))", careTypeId.toString());
+    }
+}
+
+function onSharedCareItemAttributes(): void {
+    const url = config.navigationUrls?.["SharedCareItemAttributePage"];
+    if (url) {
+        window.location.href = url;
+    }
+}
+
+function onSharedCareContactAttributes(): void {
+    const url = config.navigationUrls?.["SharedCareContactAttributePage"];
+    if (url) {
+        window.location.href = url;
+    }
+}
+
+void loadData();
+</script>
