@@ -21,6 +21,8 @@ namespace com.bemaservices.PastoralCare.Model
 {
     [RockDomain( "BEMA Services > Care" )]
     [Table( "_com_bemaservices_PastoralCare_CareContact" )]
+    [Rock.SystemGuid.EntityTypeGuid( "95719340-44E1-4A2D-BB40-8DAD1E67D83C" )]
+
     [DataContract]
     public partial class CareContact : Rock.Data.Model<CareContact>, Rock.Data.IRockEntity
     {

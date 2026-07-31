@@ -1,292 +1,239 @@
 <template>
-    <NotificationBox v-if="errorMessage" alertType="danger">{{ errorMessage }}</NotificationBox>
+    <NotificationBox v-if="blockError" alertType="warning" v-html="blockError"></NotificationBox>
 
-    <div class="panel panel-block">
-        <div class="panel-heading">
-            <h1 class="panel-title">{{ title }}</h1>
-        </div>
-        <div class="panel-body">
-            <div class="row">
-                <div class="col-md-4">
-                    <PersonPicker v-model="person" label="Person" />
-                </div>
-                <div class="col-md-4">
-                    <CheckBox v-model="entity.isActive" label="Active" />
-                </div>
-                <div class="col-md-4">
-                    <PersonPicker v-model="requester" label="Requester" />
-                </div>
-            </div>
+    <NotificationBox v-if="errorMessage" alertType="danger" v-html="errorMessage"></NotificationBox>
 
-            <div class="form-group">
-                <label class="control-label">Care Types</label>
-                <div>
-                    <label v-for="careType in careTypes" :key="careType.value" class="checkbox-inline">
-                        <input type="checkbox"
-                               :value="careType.value"
-                               :checked="selectedCareTypes.includes(careType.value ?? '')"
-                               @change="onCareTypeToggle(careType.value ?? '', ($event.target as HTMLInputElement).checked)">
-                        {{ careType.text }}
-                    </label>
-                </div>
-            </div>
+    <DetailBlock v-if="!blockError"
+                 v-model:mode="panelMode"
+                 :name="panelName"
+                 :labels="blockLabels"
+                 :entityKey="entityKey"
+                 :isAuditHidden="false"
+                 :isBadgesVisible="true"
+                 :isDeleteVisible="isEditable"
+                 :isEditVisible="isEditable"
+                 :isFollowVisible="true"
+                 :isSecurityHidden="false"
+                 @cancelEdit="onCancelEdit"
+                 @delete="onDelete"
+                 @edit="onEdit"
+                 @save="onSave">
+        <template #view>
+            <ViewPanel :modelValue="careItemViewBag" :options="options" />
+        </template>
 
-            <div class="form-group">
-                <label class="control-label">Request Date</label>
-                <input v-model="requestDateTime" type="datetime-local" class="form-control">
-            </div>
-
-            <TextBox v-model="entity.description" label="Description" textMode="multiline" />
-
-            <div class="actions">
-                <button type="button" class="btn btn-primary" @click="onSave">Save</button>
-                <button type="button" class="btn btn-link" @click="onCancel">Cancel</button>
-            </div>
-        </div>
-    </div>
-
-    <div class="panel panel-block" v-if="entity.id > 0">
-        <div class="panel-heading">
-            <h2 class="panel-title">Contacts</h2>
-        </div>
-        <div class="panel-body">
-            <div class="mb-2">
-                <button type="button" class="btn btn-default btn-sm" @click="onAddContact">Add Contact</button>
-            </div>
-            <ul class="list-group">
-                <li v-for="contact in entity.contacts" :key="contact.id" class="list-group-item">
-                    <strong>{{ contact.contactorName }}</strong>
-                    <span class="text-muted"> - {{ contact.contactDateTime }}</span>
-                    <div>{{ contact.description }}</div>
-                    <div class="mt-1" v-if="contact.canEdit">
-                        <button type="button" class="btn btn-xs btn-default" @click="onEditContact(contact)">Edit</button>
-                        <button type="button" class="btn btn-xs btn-danger" @click="onDeleteContact(contact)">Delete</button>
-                    </div>
-                </li>
-            </ul>
-        </div>
-    </div>
-
-    <Modal v-model="isContactModalOpen"
-           :title="activeContact.id > 0 ? 'Edit Contact' : 'Add Contact'"
-           :saveText="activeContact.id > 0 ? 'Save' : 'Add'"
-           @save="onSaveContact">
-        <PersonPicker v-model="contactPerson" label="Contactor" />
-        <div class="form-group">
-            <label class="control-label">Visit Date</label>
-            <input v-model="contactVisitDateTime" type="datetime-local" class="form-control">
-        </div>
-        <TextBox v-model="activeContact.description" label="Description" textMode="multiline" />
-    </Modal>
+        <template #edit>
+            <EditPanel v-model="careItemEditBag" :options="options" @propertyChanged="baseBlock.onPropertyChanged" />
+        </template>
+    </DetailBlock>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
-import { onConfigurationValuesChanged, useConfigurationValues, useInvokeBlockAction, useReloadBlock } from "@Obsidian/Utility/block";
-import { alert, confirm } from "@Obsidian/Utility/dialogs";
+import { computed, ref } from "vue";
 import NotificationBox from "@Obsidian/Controls/notificationBox.obs";
-import TextBox from "@Obsidian/Controls/textBox.obs";
-import CheckBox from "@Obsidian/Controls/checkBox.obs";
-import PersonPicker from "@Obsidian/Controls/personPicker.obs";
-import Modal from "@Obsidian/Controls/modal.obs";
-import { ListItemBag } from "@Obsidian/ViewModels/Utility/listItemBag";
+import DetailBlock from "@Obsidian/Templates/detailBlock";
+import { DetailPanelMode } from "@Obsidian/Enums/Controls/detailPanelMode";
+import { PanelAction } from "@Obsidian/Types/Controls/panelAction";
+import EditPanel from "./CareItemDetail/editPanel.partial.obs";
+import ViewPanel from "./CareItemDetail/viewPanel.partial.obs";
+import { onConfigurationValuesChanged, useConfigurationValues, useEntityDetailBlock, useInvokeBlockAction, useReloadBlock } from "@Obsidian/Utility/block";
+import { NavigationUrlKey } from "./CareItemDetail/types.partial";
+import { DetailBlockBox } from "@Obsidian/ViewModels/Blocks/detailBlockBox";
+import { CareItemBag, CareItemDetailOptionsBag } from "./viewModels";
+import { ValidPropertiesBox } from "@Obsidian/ViewModels/Utility/validPropertiesBox";
 
-type CareContactBag = {
-    id: number;
-    contactorId?: number;
-    contactorName?: string;
-    contactDateTime?: string;
-    description?: string;
-    canEdit?: boolean;
-};
-
-type CareItemBag = {
-    id: number;
-    idKey?: string;
-    personId?: number;
-    personName?: string;
-    contactorId?: number;
-    contactorName?: string;
-    contactDateTime?: string;
-    description?: string;
-    isActive: boolean;
-    careTypeIds?: number[];
-    contacts: CareContactBag[];
-};
-
-type BlockConfig = {
-    entity?: CareItemBag;
-    options?: {
-        careTypes?: ListItemBag[];
-        allowRequesterSelfSelection?: boolean;
-    };
-    parentPageUrl?: string;
-};
-
-const config = useConfigurationValues<BlockConfig>();
+const config = useConfigurationValues<DetailBlockBox<CareItemBag, CareItemDetailOptionsBag>>();
 const invokeBlockAction = useInvokeBlockAction();
 
+// All blocks auto reload when changing block settings unless there is an
+// explicit reason not to (like using a custom reload function instead),
+// in which case you can remove this code.
 onConfigurationValuesChanged(useReloadBlock());
 
+// #region Values
+
+const blockError = ref("");
 const errorMessage = ref("");
-const entity = reactive<CareItemBag>({
-    id: config.entity?.id ?? 0,
-    idKey: config.entity?.idKey ?? "",
-    personId: config.entity?.personId,
-    personName: config.entity?.personName,
-    contactorId: config.entity?.contactorId,
-    contactorName: config.entity?.contactorName,
-    contactDateTime: config.entity?.contactDateTime,
-    description: config.entity?.description ?? "",
-    isActive: config.entity?.isActive ?? true,
-    careTypeIds: config.entity?.careTypeIds ?? [],
-    contacts: config.entity?.contacts ?? []
+
+const careItemViewBag = ref(config.entity);
+const careItemEditBag = ref<ValidPropertiesBox<CareItemBag>>({
+    bag: {} as CareItemBag
 });
 
-const careTypes = computed(() => config.options?.careTypes ?? []);
-const selectedCareTypes = ref<string[]>((entity.careTypeIds ?? []).map(id => id.toString()));
-const requestDateTime = ref(entity.contactDateTime ? toDateTimeLocal(entity.contactDateTime) : "");
-const person = ref<ListItemBag | null>(entity.personId ? { value: entity.personId.toString(), text: entity.personName ?? "" } : null);
-const requester = ref<ListItemBag | null>(entity.contactorId ? { value: entity.contactorId.toString(), text: entity.contactorName ?? "" } : null);
-const isContactModalOpen = ref(false);
-const activeContact = reactive<CareContactBag>({ id: 0, description: "" });
-const contactPerson = ref<ListItemBag | null>(null);
-const contactVisitDateTime = ref("");
+const panelMode = ref<DetailPanelMode>(DetailPanelMode.View);
 
-const title = computed(() => entity.id > 0 ? "Care Item" : "Add Care Item");
+const baseBlock = useEntityDetailBlock({
+    blockConfig: config,
+    entity: careItemEditBag
+});
 
-function onCareTypeToggle(value: string, checked: boolean): void {
-    if (checked) {
-        if (!selectedCareTypes.value.includes(value)) {
-            selectedCareTypes.value.push(value);
-        }
+// #endregion
+
+// #region Computed Values
+
+/**
+ * The entity name to display in the block panel.
+ */
+const panelName = computed((): string => {
+    return "TODO: Fill Me In";
+});
+
+/**
+ * The identifier key value for this entity.
+ */
+const entityKey = computed((): string => {
+    return careItemViewBag.value?.idKey ?? "";
+});
+
+/**
+ * Additional labels to display in the block panel.
+ */
+const blockLabels = computed((): PanelAction[] | undefined => {
+    const labels: PanelAction[] = [];
+
+    if (panelMode.value !== DetailPanelMode.View) {
+        return undefined;
+    }
+
+    if (careItemViewBag.value?.isActive === true) {
+        labels.push({
+            iconCssClass: "fa fa-lightbulb",
+            title: "Active",
+            type: "success"
+        });
     }
     else {
-        selectedCareTypes.value = selectedCareTypes.value.filter(v => v !== value);
+        labels.push({
+            iconCssClass: "far fa-lightbulb",
+            title: "Inactive",
+            type: "danger"
+        });
     }
+
+    return labels;
+});
+
+const isEditable = computed((): boolean => {
+    return config.isEditable === true;
+});
+
+const options = computed((): CareItemDetailOptionsBag => {
+    return config.options ?? {};
+});
+
+// #endregion
+
+// #region Functions
+
+// #endregion
+
+// #region Event Handlers
+
+/**
+ * Event handler for the Cancel button being clicked while in Edit mode.
+ * Handles redirect to parent page if creating a new entity.
+ *
+ * @returns true if the panel should leave edit mode; false if it should stay in edit mode; or a string containing a redirect URL.
+ */
+async function onCancelEdit(): Promise<boolean | string> {
+    if (!careItemEditBag.value.bag?.idKey) {
+        if (config.navigationUrls?.[NavigationUrlKey.ParentPage]) {
+            return config.navigationUrls[NavigationUrlKey.ParentPage];
+        }
+
+        return false;
+    }
+
+    return true;
 }
 
-async function onSave(): Promise<void> {
+/**
+ * Event handler for the Delete button being clicked. Sends the
+ * delete request to the server and then redirects to the target page.
+ *
+ * @returns false if it should stay on the page; or a string containing a redirect URL.
+ */
+async function onDelete(): Promise<false | string> {
     errorMessage.value = "";
 
-    const payload: CareItemBag = {
-        ...entity,
-        personId: person.value?.value ? parseInt(person.value.value) : undefined,
-        contactorId: requester.value?.value ? parseInt(requester.value.value) : undefined,
-        contactDateTime: requestDateTime.value ? new Date(requestDateTime.value).toISOString() : undefined,
-        careTypeIds: selectedCareTypes.value.map(v => parseInt(v)),
-        contacts: entity.contacts
-    };
-
-    const result = await invokeBlockAction<{ id: number; idKey: string }>("Save", { bag: payload });
-    if (!result.isSuccess || !result.data) {
-        errorMessage.value = result.errorMessage ?? "Unable to save care item.";
-        return;
-    }
-
-    if (entity.id === 0) {
-        entity.id = result.data.id;
-        entity.idKey = result.data.idKey;
-        await alert("Care item saved.");
-    }
-
-    await loadContacts();
-}
-
-function onCancel(): void {
-    if (config.parentPageUrl) {
-        window.location.href = config.parentPageUrl;
-    }
-}
-
-function toDateTimeLocal(value: string): string {
-    const date = new Date(value);
-    const pad = (n: number): string => n.toString().padStart(2, "0");
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-async function loadContacts(): Promise<void> {
-    if (!entity.idKey) {
-        return;
-    }
-
-    const result = await invokeBlockAction<CareContactBag[]>("GetContacts", {
-        careItemKey: entity.idKey
+    const result = await invokeBlockAction<string>("Delete", {
+        key: careItemViewBag.value?.idKey
     });
 
     if (result.isSuccess && result.data) {
-        entity.contacts = result.data;
+        return result.data;
+    }
+    else {
+        errorMessage.value = result.errorMessage ?? "Unknown error while trying to delete care item.";
+
+        return false;
     }
 }
 
-function onAddContact(): void {
-    activeContact.id = 0;
-    activeContact.description = "";
-    activeContact.contactorId = undefined;
-    contactPerson.value = null;
-    contactVisitDateTime.value = toDateTimeLocal(new Date().toISOString());
-    isContactModalOpen.value = true;
-}
+/**
+ * Event handler for the Edit button being clicked. Request the edit
+ * details from the server and then enter edit mode.
+ *
+ * @returns true if the panel should enter edit mode; otherwise false.
+ */
+async function onEdit(): Promise<boolean> {
+    const result = await invokeBlockAction<ValidPropertiesBox<CareItemBag>>("Edit", {
+        key: careItemViewBag.value?.idKey
+    });
 
-function onEditContact(contact: CareContactBag): void {
-    activeContact.id = contact.id;
-    activeContact.description = contact.description ?? "";
-    activeContact.contactorId = contact.contactorId;
-    contactPerson.value = contact.contactorId ? { value: contact.contactorId.toString(), text: contact.contactorName ?? "" } : null;
-    contactVisitDateTime.value = contact.contactDateTime ? toDateTimeLocal(contact.contactDateTime) : toDateTimeLocal(new Date().toISOString());
-    isContactModalOpen.value = true;
-}
+    if (result.isSuccess && result.data && result.data.bag) {
+        careItemEditBag.value = {
+            bag: result.data.bag,
+            validProperties: result.data.validProperties ?? Object.keys(result.data.bag)
+        };
 
-async function onSaveContact(): Promise<void> {
-    if (!entity.idKey) {
-        await alert("Save the care item before adding contacts.");
-        isContactModalOpen.value = false;
-        return;
+        return true;
     }
+    else {
+        return false;
+    }
+}
 
-    const result = await invokeBlockAction<CareContactBag>("SaveContact", {
-        careItemKey: entity.idKey,
-        bag: {
-            id: activeContact.id,
-            contactorId: contactPerson.value?.value ? parseInt(contactPerson.value.value) : undefined,
-            contactDateTime: contactVisitDateTime.value ? new Date(contactVisitDateTime.value).toISOString() : undefined,
-            description: activeContact.description
+/**
+ * Event handler for the panel's Save event. Send the data to the server
+ * to be saved and then leave edit mode or redirect to target page.
+ *
+ * @returns true if the panel should leave edit mode; false if it should stay in edit mode; or a string containing a redirect URL.
+ */
+async function onSave(): Promise<boolean | string> {
+    errorMessage.value = "";
+
+    const result = await invokeBlockAction<ValidPropertiesBox<CareItemBag> | string>("Save", {
+        box: careItemEditBag.value
+    });
+
+    if (result.isSuccess && result.data) {
+        if (result.statusCode === 200 && typeof result.data === "object") {
+            careItemViewBag.value = result.data.bag;
+
+            return true;
         }
-    });
+        else if (result.statusCode === 201 && typeof result.data === "string") {
+            return result.data;
+        }
+    }
 
-    if (result.isSuccess) {
-        isContactModalOpen.value = false;
-        await loadContacts();
-    }
-    else {
-        await alert(result.errorMessage ?? "Unable to save contact.");
-    }
+    errorMessage.value = result.errorMessage ?? "Unknown error while trying to save care item.";
+
+    return false;
 }
 
-async function onDeleteContact(contact: CareContactBag): Promise<void> {
-    if (!entity.idKey) {
-        return;
-    }
+// #endregion
 
-    const confirmed = await confirm("Delete this contact?");
-    if (!confirmed) {
-        return;
-    }
-
-    const result = await invokeBlockAction<string>("DeleteContact", {
-        careItemKey: entity.idKey,
-        contactId: contact.id
-    });
-
-    if (result.isSuccess) {
-        await loadContacts();
-    }
-    else {
-        await alert(result.errorMessage ?? "Unable to delete contact.");
-    }
+// Handle any initial error conditions or the need to go into edit mode.
+if (config.errorMessage) {
+    blockError.value = config.errorMessage;
 }
-
-if (entity.idKey) {
-    void loadContacts();
+else if (!config.entity) {
+    blockError.value = "The specified care item could not be viewed.";
+}
+else if (!config.entity.idKey) {
+    careItemEditBag.value = { bag: config.entity };
+    panelMode.value = DetailPanelMode.Add;
 }
 </script>

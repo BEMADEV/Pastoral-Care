@@ -20,6 +20,7 @@ namespace com.bemaservices.PastoralCare.Model
 {
     [RockDomain( "BEMA Services > Care" )]
     [Table( "_com_bemaservices_PastoralCare_CareType" )]
+    [Rock.SystemGuid.EntityTypeGuid( "CE1DFE04-9BC1-423B-A63C-983AC28140B5" )]
     [DataContract]
     public partial class CareType : Rock.Data.Model<CareType>, Rock.Data.IRockEntity
     {

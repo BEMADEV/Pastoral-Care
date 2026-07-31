@@ -1,94 +1,137 @@
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.Entity;
 using System.Linq;
 
 using Rock;
 using Rock.Attribute;
 using Rock.Blocks;
 using Rock.Data;
+using Rock.Model;
+using Rock.Obsidian.UI;
 using Rock.Security;
+using Rock.ViewModels.Blocks;
+using Rock.Web.Cache;
 
 using com.bemaservices.PastoralCare.Model;
+using com.bemaservices.PastoralCare.ViewModels;
 
 namespace com.bemaservices.PastoralCare.Blocks
 {
+    /// <summary>
+    /// Displays a list of care types.
+    /// </summary>
+
     [DisplayName( "Care Type List" )]
-    [Category( "BEMA Services > Pastoral Care" )]
-    [Description( "Block to display the care types." )]
+    [Category( "BEMA Software Services > Pastoral Care" )]
+    [Description( "Displays a list of care types." )]
     [IconCssClass( "fa fa-list" )]
     [SupportedSiteTypes( SiteType.Web )]
 
-    [LinkedPage( "Detail Page", "Page used to view details of a care type.", Key = AttributeKey.DetailPage, Order = 0 )]
-    [BooleanField( "Allow Shared Care Item Attributes", "Displays a link to a page for care item attributes shared across care types", false, Key = AttributeKey.AllowSharedCareItemAttributes, Order = 1 )]
-    [LinkedPage( "Shared Care Item Attribute Page", "Page used to view universal care item attributes.", false, Key = AttributeKey.SharedCareItemAttributePage, Order = 2 )]
-    [BooleanField( "Allow Shared Care Contact Attributes", "Displays a link to a page for care contact attributes shared across care types", false, Key = AttributeKey.AllowSharedCareContactAttributes, Order = 3 )]
-    [LinkedPage( "Shared Care Contact Attribute Page", "Page used to view universal care contact attributes.", false, Key = AttributeKey.SharedCareContactAttributePage, Order = 4 )]
+    [LinkedPage( "Detail Page",
+        Description = "The page that will show the care type details.",
+        Key = AttributeKey.DetailPage )]
 
-    [Rock.SystemGuid.EntityTypeGuid( "f86385f8-a153-4de8-8cf4-6ce92c37b056" )]
-    [Rock.SystemGuid.BlockTypeGuid( "252ef3e6-876a-40ba-9f7a-0eeec9a50200" )]
-    public class CareTypeList : RockBlockType
+    [Rock.SystemGuid.EntityTypeGuid( "39577b84-5e6f-4582-93ae-0707e56cc4fc" )]
+    [Rock.SystemGuid.BlockTypeGuid( "e3e46273-ce72-43da-a130-2f91f97ef21e" )]
+    [CustomizedGrid]
+    public class CareTypeList : RockEntityListBlockType<CareType>
     {
+        #region Keys
+
         private static class AttributeKey
         {
             public const string DetailPage = "DetailPage";
-            public const string AllowSharedCareItemAttributes = "AllowSharedCareItemAttributes";
-            public const string SharedCareItemAttributePage = "SharedCareItemAttributePage";
-            public const string AllowSharedCareContactAttributes = "AllowSharedCareContactAttributes";
-            public const string SharedCareContactAttributePage = "SharedCareContactAttributePage";
         }
 
         private static class NavigationUrlKey
         {
             public const string DetailPage = "DetailPage";
-            public const string SharedCareItemAttributePage = "SharedCareItemAttributePage";
-            public const string SharedCareContactAttributePage = "SharedCareContactAttributePage";
         }
 
+        #endregion Keys
+
+        #region Properties
+
+        /// <inheritdoc/>
         public override string ObsidianFileUrl => "~/Plugins/com_bemaservices/PastoralCare/careTypeList.obs";
 
+        #endregion
+
+        #region Methods
+
+        /// <inheritdoc/>
         public override object GetObsidianBlockInitialization()
         {
-            return new
+            var box = new ListBlockBox<CareTypeListOptionsBag>();
+            var builder = GetGridBuilder();
+
+            box.IsAddEnabled = GetIsAddEnabled();
+            box.IsDeleteEnabled = false;
+            box.ExpectedRowCount = null;
+            box.NavigationUrls = GetBoxNavigationUrls();
+            box.Options = GetBoxOptions();
+            box.GridDefinition = builder.BuildDefinition();
+
+            return box;
+        }
+
+        /// <summary>
+        /// Gets the box options required for the component to render the list.
+        /// </summary>
+        /// <returns>The options that provide additional details to the block.</returns>
+        private CareTypeListOptionsBag GetBoxOptions()
+        {
+            var options = new CareTypeListOptionsBag();
+
+            return options;
+        }
+
+        /// <summary>
+        /// Determines if the add button should be enabled in the grid.
+        /// </summary>
+        /// <returns>A boolean value that indicates if the add button should be enabled.</returns>
+        private bool GetIsAddEnabled()
+        {
+            var entity = new CareType();
+
+            return entity.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson );
+        }
+
+        /// <summary>
+        /// Gets the box navigation URLs required for the page to operate.
+        /// </summary>
+        /// <returns>A dictionary of key names and URL values.</returns>
+        private Dictionary<string, string> GetBoxNavigationUrls()
+        {
+            return new Dictionary<string, string>
             {
-                isAddEnabled = UserCanAdministrate,
-                options = new
-                {
-                    showSharedCareItemAttributes = GetAttributeValue( AttributeKey.AllowSharedCareItemAttributes ).AsBoolean(),
-                    showSharedCareContactAttributes = GetAttributeValue( AttributeKey.AllowSharedCareContactAttributes ).AsBoolean()
-                },
-                navigationUrls = new Dictionary<string, string>
-                {
-                    [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, "CareTypeId", "((Key))" ),
-                    [NavigationUrlKey.SharedCareItemAttributePage] = this.GetLinkedPageUrl( AttributeKey.SharedCareItemAttributePage ),
-                    [NavigationUrlKey.SharedCareContactAttributePage] = this.GetLinkedPageUrl( AttributeKey.SharedCareContactAttributePage )
-                }
+                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, "CareTypeId", "((Key))" )
             };
         }
 
-        [BlockAction]
-        public BlockActionResult GetData()
+        /// <inheritdoc/>
+        protected override IQueryable<CareType> GetListQueryable( RockContext rockContext )
         {
-            using ( var rockContext = new RockContext() )
-            {
-                var allCareTypes = new CareTypeService( rockContext )
-                    .Queryable()
-                    .OrderBy( ct => ct.Name )
-                    .ToList();
-
-                var rows = allCareTypes
-                    .Where( ct => UserCanEdit || ct.IsAuthorized( Authorization.VIEW, RequestContext.CurrentPerson ) )
-                    .Select( ct => (object) new
-                    {
-                        id = ct.Id,
-                        idKey = ct.IdKey,
-                        name = ct.Name,
-                        isActive = ct.IsActive,
-                        canEdit = UserCanAdministrate || ct.IsAuthorized( Authorization.ADMINISTRATE, RequestContext.CurrentPerson )
-                    } )
-                    .ToList();
-
-                return ActionOk( rows );
-            }
+            return base.GetListQueryable( rockContext );
         }
+
+        /// <inheritdoc/>
+        protected override GridBuilder<CareType> GetGridBuilder()
+        {
+            return new GridBuilder<CareType>()
+                .WithBlock( this )
+                .AddTextField( "idKey", a => a.IdKey )
+                .AddField( "description", a => a.Description )
+                .AddField( "name", a => a.Name )
+                .AddTextField( "name", a => a.Name )
+                .AddAttributeFields( GetGridAttributes() );
+        }
+
+        #endregion
+
+        #region Block Actions
+
+        #endregion
     }
 }

@@ -1,284 +1,239 @@
 <template>
-    <NotificationBox v-if="errorMessage" alertType="danger">{{ errorMessage }}</NotificationBox>
+    <NotificationBox v-if="blockError" alertType="warning" v-html="blockError"></NotificationBox>
 
-    <div class="panel panel-block">
-        <div class="panel-heading">
-            <h1 class="panel-title">{{ title }}</h1>
-        </div>
-        <div class="panel-body">
-            <div class="row">
-                <div class="col-md-6">
-                    <TextBox v-model="entity.name" label="Name" rules="required" :disabled="!config.isEditable" />
-                </div>
-                <div class="col-md-6">
-                    <CheckBox v-model="entity.isActive" label="Active" :disabled="!config.isEditable" />
-                </div>
-            </div>
+    <NotificationBox v-if="errorMessage" alertType="danger" v-html="errorMessage"></NotificationBox>
 
-            <TextBox v-model="entity.description" label="Description" textMode="multiline" :disabled="!config.isEditable" />
+    <DetailBlock v-if="!blockError"
+                 v-model:mode="panelMode"
+                 :name="panelName"
+                 :labels="blockLabels"
+                 :entityKey="entityKey"
+                 :isAuditHidden="false"
+                 :isBadgesVisible="true"
+                 :isDeleteVisible="isEditable"
+                 :isEditVisible="isEditable"
+                 :isFollowVisible="true"
+                 :isSecurityHidden="false"
+                 @cancelEdit="onCancelEdit"
+                 @delete="onDelete"
+                 @edit="onEdit"
+                 @save="onSave">
+        <template #view>
+            <ViewPanel :modelValue="careTypeViewBag" :options="options" />
+        </template>
 
-            <fieldset class="mt-3" v-if="entity.id > 0">
-                <legend>Care Item Attributes</legend>
-                <div class="mb-2">
-                    <button type="button" class="btn btn-default btn-sm" :disabled="!config.isEditable" @click="onAddAttribute">Add Attribute</button>
-                </div>
-                <table class="table table-condensed">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Key</th>
-                            <th>Field Type</th>
-                            <th class="text-center">Required</th>
-                            <th class="text-center">Grid</th>
-                            <th class="text-center">Search</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="attribute in attributes" :key="attribute.guid">
-                            <td>{{ attribute.name }}</td>
-                            <td>{{ attribute.key }}</td>
-                            <td>{{ attribute.fieldTypeName }}</td>
-                            <td class="text-center">{{ attribute.isRequired ? "Yes" : "No" }}</td>
-                            <td class="text-center">{{ attribute.isGridColumn ? "Yes" : "No" }}</td>
-                            <td class="text-center">{{ attribute.allowSearch ? "Yes" : "No" }}</td>
-                            <td class="text-right">
-                                <button type="button" class="btn btn-xs btn-default" :disabled="!config.isEditable" @click="onEditAttribute(attribute)">Edit</button>
-                                <button type="button" class="btn btn-xs btn-danger" :disabled="!config.isEditable" @click="onDeleteAttribute(attribute)">Delete</button>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </fieldset>
-
-            <div class="actions">
-                <button type="button" class="btn btn-primary" :disabled="!config.isEditable" @click="onSave">Save</button>
-                <button type="button" class="btn btn-link" @click="onCancel">Cancel</button>
-                <button v-if="entity.id > 0" type="button" class="btn btn-default" :disabled="!config.isEditable" @click="onCopy">Copy</button>
-                <button v-if="entity.id > 0" type="button" class="btn btn-danger" :disabled="!config.isEditable" @click="onDelete">Delete</button>
-            </div>
-        </div>
-    </div>
-
-    <Modal v-model="isAttributeModalOpen"
-           title="Care Item Attribute"
-           saveText="Save"
-           @save="onSaveAttribute">
-        <TextBox v-model="activeAttribute.name" label="Name" rules="required" />
-        <TextBox v-model="activeAttribute.key" label="Key" rules="required" />
-        <TextBox v-model="activeAttribute.description" label="Description" textMode="multiline" />
-        <DropDownList v-model="activeAttribute.fieldTypeIdString"
-                      label="Field Type"
-                      rules="required"
-                      :items="fieldTypeItems" />
-        <CheckBox v-model="activeAttribute.isRequired" label="Required" />
-        <CheckBox v-model="activeAttribute.isGridColumn" label="Show In Grid" />
-        <CheckBox v-model="activeAttribute.allowSearch" label="Allow Search" />
-    </Modal>
+        <template #edit>
+            <EditPanel v-model="careTypeEditBag" :options="options" @propertyChanged="baseBlock.onPropertyChanged" />
+        </template>
+    </DetailBlock>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
-import { onConfigurationValuesChanged, useConfigurationValues, useInvokeBlockAction, useReloadBlock } from "@Obsidian/Utility/block";
-import { confirm, alert } from "@Obsidian/Utility/dialogs";
+import { computed, ref } from "vue";
 import NotificationBox from "@Obsidian/Controls/notificationBox.obs";
-import TextBox from "@Obsidian/Controls/textBox.obs";
-import CheckBox from "@Obsidian/Controls/checkBox.obs";
-import Modal from "@Obsidian/Controls/modal.obs";
-import DropDownList from "@Obsidian/Controls/dropDownList.obs";
+import DetailBlock from "@Obsidian/Templates/detailBlock";
+import { DetailPanelMode } from "@Obsidian/Enums/Controls/detailPanelMode";
+import { PanelAction } from "@Obsidian/Types/Controls/panelAction";
+import EditPanel from "./CareTypeDetail/editPanel.partial.obs";
+import ViewPanel from "./CareTypeDetail/viewPanel.partial.obs";
+import { onConfigurationValuesChanged, useConfigurationValues, useEntityDetailBlock, useInvokeBlockAction, useReloadBlock } from "@Obsidian/Utility/block";
+import { NavigationUrlKey } from "./CareTypeDetail/types.partial";
+import { DetailBlockBox } from "@Obsidian/ViewModels/Blocks/detailBlockBox";
+import { CareTypeBag, CareTypeDetailOptionsBag } from "./viewModels";
+import { ValidPropertiesBox } from "@Obsidian/ViewModels/Utility/validPropertiesBox";
 
-type CareTypeBag = {
-    id: number;
-    idKey?: string;
-    name?: string;
-    description?: string;
-    isActive: boolean;
-};
-
-type BlockConfig = {
-    entity?: CareTypeBag;
-    attributes?: CareTypeAttributeBag[];
-    fieldTypes?: FieldTypeOption[];
-    isEditable?: boolean;
-    parentPageUrl?: string;
-};
-
-type CareTypeAttributeBag = {
-    guid: string;
-    name: string;
-    key: string;
-    description?: string;
-    fieldTypeId: number;
-    fieldTypeName?: string;
-    isRequired: boolean;
-    isGridColumn: boolean;
-    allowSearch: boolean;
-    order: number;
-};
-
-type FieldTypeOption = {
-    value: number;
-    text: string;
-};
-
-const config = useConfigurationValues<BlockConfig>();
+const config = useConfigurationValues<DetailBlockBox<CareTypeBag, CareTypeDetailOptionsBag>>();
 const invokeBlockAction = useInvokeBlockAction();
 
+// All blocks auto reload when changing block settings unless there is an
+// explicit reason not to (like using a custom reload function instead),
+// in which case you can remove this code.
 onConfigurationValuesChanged(useReloadBlock());
 
+// #region Values
+
+const blockError = ref("");
 const errorMessage = ref("");
-const entity = reactive<CareTypeBag>({
-    id: config.entity?.id ?? 0,
-    idKey: config.entity?.idKey ?? "",
-    name: config.entity?.name ?? "",
-    description: config.entity?.description ?? "",
-    isActive: config.entity?.isActive ?? true
+
+const careTypeViewBag = ref(config.entity);
+const careTypeEditBag = ref<ValidPropertiesBox<CareTypeBag>>({
+    bag: {} as CareTypeBag
 });
 
-const title = computed(() => entity.id > 0 ? (entity.name || "Care Type") : "Add Care Type");
-const attributes = ref<CareTypeAttributeBag[]>(config.attributes ?? []);
-const isAttributeModalOpen = ref(false);
-const activeAttribute = reactive<{ guid: string; name: string; key: string; description: string; fieldTypeIdString: string; isRequired: boolean; isGridColumn: boolean; allowSearch: boolean; order: number }>({
-    guid: "",
-    name: "",
-    key: "",
-    description: "",
-    fieldTypeIdString: "",
-    isRequired: false,
-    isGridColumn: false,
-    allowSearch: false,
-    order: 0
+const panelMode = ref<DetailPanelMode>(DetailPanelMode.View);
+
+const baseBlock = useEntityDetailBlock({
+    blockConfig: config,
+    entity: careTypeEditBag
 });
 
-const fieldTypeItems = computed(() => {
-    return (config.fieldTypes ?? []).map(ft => ({
-        value: ft.value.toString(),
-        text: ft.text
-    }));
+// #endregion
+
+// #region Computed Values
+
+/**
+ * The entity name to display in the block panel.
+ */
+const panelName = computed((): string => {
+    return careTypeViewBag.value?.name ?? "";
 });
 
-async function onSave(): Promise<void> {
+/**
+ * The identifier key value for this entity.
+ */
+const entityKey = computed((): string => {
+    return careTypeViewBag.value?.idKey ?? "";
+});
+
+/**
+ * Additional labels to display in the block panel.
+ */
+const blockLabels = computed((): PanelAction[] | undefined => {
+    const labels: PanelAction[] = [];
+
+    if (panelMode.value !== DetailPanelMode.View) {
+        return undefined;
+    }
+
+    if (careTypeViewBag.value?.isActive === true) {
+        labels.push({
+            iconCssClass: "fa fa-lightbulb",
+            title: "Active",
+            type: "success"
+        });
+    }
+    else {
+        labels.push({
+            iconCssClass: "far fa-lightbulb",
+            title: "Inactive",
+            type: "danger"
+        });
+    }
+
+    return labels;
+});
+
+const isEditable = computed((): boolean => {
+    return config.isEditable === true;
+});
+
+const options = computed((): CareTypeDetailOptionsBag => {
+    return config.options ?? {};
+});
+
+// #endregion
+
+// #region Functions
+
+// #endregion
+
+// #region Event Handlers
+
+/**
+ * Event handler for the Cancel button being clicked while in Edit mode.
+ * Handles redirect to parent page if creating a new entity.
+ *
+ * @returns true if the panel should leave edit mode; false if it should stay in edit mode; or a string containing a redirect URL.
+ */
+async function onCancelEdit(): Promise<boolean | string> {
+    if (!careTypeEditBag.value.bag?.idKey) {
+        if (config.navigationUrls?.[NavigationUrlKey.ParentPage]) {
+            return config.navigationUrls[NavigationUrlKey.ParentPage];
+        }
+
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * Event handler for the Delete button being clicked. Sends the
+ * delete request to the server and then redirects to the target page.
+ *
+ * @returns false if it should stay on the page; or a string containing a redirect URL.
+ */
+async function onDelete(): Promise<false | string> {
     errorMessage.value = "";
 
-    const result = await invokeBlockAction<{ id: number; idKey: string }>("Save", { bag: entity });
-    if (!result.isSuccess || !result.data) {
-        errorMessage.value = result.errorMessage ?? "Unable to save care type.";
-        return;
-    }
+    const result = await invokeBlockAction<string>("Delete", {
+        key: careTypeViewBag.value?.idKey
+    });
 
-    if (config.parentPageUrl) {
-        window.location.href = `${window.location.pathname}?CareTypeId=${result.data.id}`;
-    }
-}
-
-function onCancel(): void {
-    if (config.parentPageUrl) {
-        window.location.href = config.parentPageUrl;
-    }
-}
-
-async function onCopy(): Promise<void> {
-    const result = await invokeBlockAction<string>("Copy", { key: entity.idKey });
     if (result.isSuccess && result.data) {
-        window.location.href = result.data;
+        return result.data;
     }
     else {
-        await alert(result.errorMessage ?? "Unable to copy care type.");
+        errorMessage.value = result.errorMessage ?? "Unknown error while trying to delete care type.";
+
+        return false;
     }
 }
 
-async function onDelete(): Promise<void> {
-    const confirmed = await confirm("This will also delete all care items that reference this care type. Continue?");
-    if (!confirmed) {
-        return;
-    }
+/**
+ * Event handler for the Edit button being clicked. Request the edit
+ * details from the server and then enter edit mode.
+ *
+ * @returns true if the panel should enter edit mode; otherwise false.
+ */
+async function onEdit(): Promise<boolean> {
+    const result = await invokeBlockAction<ValidPropertiesBox<CareTypeBag>>("Edit", {
+        key: careTypeViewBag.value?.idKey
+    });
 
-    const result = await invokeBlockAction<string>("Delete", { key: entity.idKey });
-    if (result.isSuccess && result.data) {
-        window.location.href = result.data;
+    if (result.isSuccess && result.data && result.data.bag) {
+        careTypeEditBag.value = {
+            bag: result.data.bag,
+            validProperties: result.data.validProperties ?? Object.keys(result.data.bag)
+        };
+
+        return true;
     }
     else {
-        await alert(result.errorMessage ?? "Unable to delete care type.");
+        return false;
     }
 }
 
-function onAddAttribute(): void {
-    activeAttribute.guid = "";
-    activeAttribute.name = "";
-    activeAttribute.key = "";
-    activeAttribute.description = "";
-    activeAttribute.fieldTypeIdString = fieldTypeItems.value[0]?.value ?? "";
-    activeAttribute.isRequired = false;
-    activeAttribute.isGridColumn = false;
-    activeAttribute.allowSearch = false;
-    activeAttribute.order = attributes.value.length;
-    isAttributeModalOpen.value = true;
-}
+/**
+ * Event handler for the panel's Save event. Send the data to the server
+ * to be saved and then leave edit mode or redirect to target page.
+ *
+ * @returns true if the panel should leave edit mode; false if it should stay in edit mode; or a string containing a redirect URL.
+ */
+async function onSave(): Promise<boolean | string> {
+    errorMessage.value = "";
 
-function onEditAttribute(attribute: CareTypeAttributeBag): void {
-    activeAttribute.guid = attribute.guid;
-    activeAttribute.name = attribute.name;
-    activeAttribute.key = attribute.key;
-    activeAttribute.description = attribute.description ?? "";
-    activeAttribute.fieldTypeIdString = attribute.fieldTypeId.toString();
-    activeAttribute.isRequired = attribute.isRequired;
-    activeAttribute.isGridColumn = attribute.isGridColumn;
-    activeAttribute.allowSearch = attribute.allowSearch;
-    activeAttribute.order = attribute.order;
-    isAttributeModalOpen.value = true;
-}
+    const result = await invokeBlockAction<ValidPropertiesBox<CareTypeBag> | string>("Save", {
+        box: careTypeEditBag.value
+    });
 
-async function onSaveAttribute(): Promise<void> {
-    if (!entity.idKey) {
-        await alert("Save the care type before adding attributes.");
-        isAttributeModalOpen.value = false;
-        return;
-    }
+    if (result.isSuccess && result.data) {
+        if (result.statusCode === 200 && typeof result.data === "object") {
+            careTypeViewBag.value = result.data.bag;
 
-    const result = await invokeBlockAction<CareTypeAttributeBag[]>("SaveAttribute", {
-        careTypeKey: entity.idKey,
-        bag: {
-            guid: activeAttribute.guid,
-            name: activeAttribute.name,
-            key: activeAttribute.key,
-            description: activeAttribute.description,
-            fieldTypeId: parseInt(activeAttribute.fieldTypeIdString),
-            isRequired: activeAttribute.isRequired,
-            isGridColumn: activeAttribute.isGridColumn,
-            allowSearch: activeAttribute.allowSearch,
-            order: activeAttribute.order
+            return true;
         }
-    });
+        else if (result.statusCode === 201 && typeof result.data === "string") {
+            return result.data;
+        }
+    }
 
-    if (result.isSuccess && result.data) {
-        attributes.value = result.data;
-        isAttributeModalOpen.value = false;
-    }
-    else {
-        await alert(result.errorMessage ?? "Unable to save attribute.");
-    }
+    errorMessage.value = result.errorMessage ?? "Unknown error while trying to save care type.";
+
+    return false;
 }
 
-async function onDeleteAttribute(attribute: CareTypeAttributeBag): Promise<void> {
-    if (!entity.idKey) {
-        return;
-    }
+// #endregion
 
-    const confirmed = await confirm(`Delete attribute '${attribute.name}'?`);
-    if (!confirmed) {
-        return;
-    }
-
-    const result = await invokeBlockAction<CareTypeAttributeBag[]>("DeleteAttribute", {
-        careTypeKey: entity.idKey,
-        attributeGuid: attribute.guid
-    });
-
-    if (result.isSuccess && result.data) {
-        attributes.value = result.data;
-    }
-    else {
-        await alert(result.errorMessage ?? "Unable to delete attribute.");
-    }
+// Handle any initial error conditions or the need to go into edit mode.
+if (config.errorMessage) {
+    blockError.value = config.errorMessage;
+}
+else if (!config.entity) {
+    blockError.value = "The specified care type could not be viewed.";
+}
+else if (!config.entity.idKey) {
+    careTypeEditBag.value = { bag: config.entity };
+    panelMode.value = DetailPanelMode.Add;
 }
 </script>

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -5,346 +6,394 @@ using System.Linq;
 using Rock;
 using Rock.Attribute;
 using Rock.Blocks;
+using Rock.Constants;
 using Rock.Data;
 using Rock.Model;
 using Rock.Security;
+using Rock.ViewModels.Blocks;
+using Rock.ViewModels.Utility;
+using Rock.Web.Cache;
 
 using com.bemaservices.PastoralCare.Model;
+using com.bemaservices.PastoralCare.ViewModels;
 
 namespace com.bemaservices.PastoralCare.Blocks
 {
+    /// <summary>
+    /// Displays the details of a particular care type.
+    /// </summary>
+
     [DisplayName( "Care Type Detail" )]
-    [Category( "BEMA Services > Pastoral Care" )]
-    [Description( "Displays the details of the given Care Type for editing." )]
-    [IconCssClass( "fa fa-pencil" )]
+    [Category( "BEMA Software Services > Pastoral Care" )]
+    [Description( "Displays the details of a particular care type." )]
+    [IconCssClass( "fa fa-question" )]
     [SupportedSiteTypes( SiteType.Web )]
 
-    [Rock.SystemGuid.EntityTypeGuid( "1a87c29e-bf65-4f7d-a39d-2cfdfed57fce" )]
-    [Rock.SystemGuid.BlockTypeGuid( "7b44cb2c-67d2-4ad0-9cc5-975692cb6802" )]
-    public class CareTypeDetail : RockBlockType
+    #region Block Attributes
+
+    #endregion
+
+    [Rock.SystemGuid.EntityTypeGuid( "44c63545-67b0-4a0e-bf3c-48901b0da31a" )]
+    [Rock.SystemGuid.BlockTypeGuid( "490d0462-4bab-4c5b-a2ee-2b63531d466f" )]
+    public class CareTypeDetail : RockEntityDetailBlockType<CareType, CareTypeBag>
     {
+        #region Keys
+
         private static class PageParameterKey
         {
             public const string CareTypeId = "CareTypeId";
         }
 
-        public override string ObsidianFileUrl => "~/Plugins/com_bemaservices/PastoralCare/careTypeDetail.obs";
-
-        public override object GetObsidianBlockInitialization()
+        private static class NavigationUrlKey
         {
-            using ( var rockContext = new RockContext() )
-            {
-                var careType = GetCareTypeFromPage( rockContext ) ?? new CareType { IsActive = true };
-                var canEdit = careType.Id == 0
-                    ? UserCanAdministrate
-                    : UserCanAdministrate || careType.IsAuthorized( Authorization.ADMINISTRATE, RequestContext.CurrentPerson );
-
-                var attributes = careType.Id > 0
-                    ? GetCareTypeAttributes( careType.Id, rockContext )
-                    : new List<CareTypeAttributeBag>();
-
-                return new
-                {
-                    entity = new
-                    {
-                        id = careType.Id,
-                        idKey = careType.IdKey,
-                        name = careType.Name,
-                        description = careType.Description,
-                        isActive = careType.IsActive
-                    },
-                    attributes,
-                    fieldTypes = FieldTypeCache.All()
-                        .OrderBy( ft => ft.Name )
-                        .Select( ft => new
-                        {
-                            value = ft.Id,
-                            text = ft.Name
-                        } )
-                        .ToList(),
-                    isEditable = canEdit,
-                    parentPageUrl = this.GetParentPageUrl()
-                };
-            }
+            public const string ParentPage = "ParentPage";
         }
 
-        [BlockAction]
-        public BlockActionResult Save( CareTypeBag bag )
+        #endregion Keys
+
+        #region Properties
+
+        /// <inheritdoc/>
+        public override string ObsidianFileUrl => "~/Plugins/com_bemaservices/PastoralCare/careTypeDetail.obs";
+
+        #endregion
+
+        #region Methods
+
+        /// <inheritdoc/>
+        public override object GetObsidianBlockInitialization()
         {
-            using ( var rockContext = new RockContext() )
+            var box = new DetailBlockBox<CareTypeBag, CareTypeDetailOptionsBag>();
+
+            SetBoxInitialEntityState( box );
+
+            box.NavigationUrls = GetBoxNavigationUrls();
+            box.Options = GetBoxOptions( box.IsEditable );
+
+            return box;
+        }
+
+        /// <summary>
+        /// Gets the box options required for the component to render the view
+        /// or edit the entity.
+        /// </summary>
+        /// <param name="isEditable"><c>true</c> if the entity is editable; otherwise <c>false</c>.</param>
+        /// <returns>The options that provide additional details to the block.</returns>
+        private CareTypeDetailOptionsBag GetBoxOptions( bool isEditable )
+        {
+            var options = new CareTypeDetailOptionsBag();
+
+            return options;
+        }
+
+        /// <summary>
+        /// Validates the CareType for any final information that might not be
+        /// valid after storing all the data from the client.
+        /// </summary>
+        /// <param name="careType">The CareType to be validated.</param>
+        /// <param name="errorMessage">On <c>false</c> return, contains the error message.</param>
+        /// <returns><c>true</c> if the CareType is valid, <c>false</c> otherwise.</returns>
+        private bool ValidateCareType( CareType careType, out string errorMessage )
+        {
+            errorMessage = null;
+
+            return true;
+        }
+
+        /// <summary>
+        /// Sets the initial entity state of the box. Populates the Entity or
+        /// ErrorMessage properties depending on the entity and permissions.
+        /// </summary>
+        /// <param name="box">The box to be populated.</param>
+        private void SetBoxInitialEntityState( DetailBlockBox<CareTypeBag, CareTypeDetailOptionsBag> box )
+        {
+            var entity = GetInitialEntity();
+
+            if ( entity == null )
             {
-                var service = new CareTypeService( rockContext );
-                CareType careType;
+                box.ErrorMessage = $"The {CareType.FriendlyTypeName} was not found.";
+                return;
+            }
 
-                if ( bag.Id <= 0 && bag.IdKey.IsNullOrWhiteSpace() )
+            var isViewable = entity.IsAuthorized( Authorization.VIEW, RequestContext.CurrentPerson );
+            box.IsEditable = entity.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson );
+
+            if ( entity.Id != 0 )
+            {
+                // Existing entity was found, prepare for view mode by default.
+                if ( isViewable )
                 {
-                    if ( !UserCanAdministrate )
-                    {
-                        return ActionBadRequest( "Not authorized to add care types." );
-                    }
-
-                    careType = new CareType();
-                    service.Add( careType );
+                    box.Entity = GetEntityBagForView( entity );
                 }
                 else
                 {
-                    careType = bag.Id > 0
-                        ? service.Get( bag.Id )
-                        : service.Get( bag.IdKey, !PageCache.Layout.Site.DisablePredictableIds );
-
-                    if ( careType == null )
-                    {
-                        return ActionBadRequest( "Care Type not found." );
-                    }
-
-                    if ( !( UserCanAdministrate || careType.IsAuthorized( Authorization.ADMINISTRATE, RequestContext.CurrentPerson ) ) )
-                    {
-                        return ActionBadRequest( "Not authorized to edit this care type." );
-                    }
+                    box.ErrorMessage = EditModeMessage.NotAuthorizedToView( CareType.FriendlyTypeName );
                 }
-
-                careType.Name = bag.Name;
-                careType.Description = bag.Description;
-                careType.IsActive = bag.IsActive;
-
-                if ( !careType.IsValid )
-                {
-                    return ActionBadRequest( careType.ValidationResults.Select( v => v.ErrorMessage ).FirstOrDefault() ?? "Care Type is not valid." );
-                }
-
-                rockContext.WrapTransaction( () =>
-                {
-                    rockContext.SaveChanges();
-
-                    if ( !careType.IsAuthorized( Authorization.VIEW, RequestContext.CurrentPerson ) )
-                    {
-                        careType.AllowPerson( Authorization.VIEW, RequestContext.CurrentPerson, rockContext );
-                    }
-
-                    if ( !careType.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson ) )
-                    {
-                        careType.AllowPerson( Authorization.EDIT, RequestContext.CurrentPerson, rockContext );
-                    }
-
-                    if ( !careType.IsAuthorized( Authorization.ADMINISTRATE, RequestContext.CurrentPerson ) )
-                    {
-                        careType.AllowPerson( Authorization.ADMINISTRATE, RequestContext.CurrentPerson, rockContext );
-                    }
-                } );
-
-                return ActionOk( new { id = careType.Id, idKey = careType.IdKey } );
             }
-        }
-
-        [BlockAction]
-        public BlockActionResult Delete( string key )
-        {
-            using ( var rockContext = new RockContext() )
+            else
             {
-                var service = new CareTypeService( rockContext );
-                var careType = service.Get( key, !PageCache.Layout.Site.DisablePredictableIds );
-
-                if ( careType == null )
+                // New entity is being created, prepare for edit mode by default.
+                if ( box.IsEditable )
                 {
-                    return ActionBadRequest( "Care Type not found." );
+                    box.Entity = GetEntityBagForEdit( entity );
                 }
-
-                if ( !( UserCanAdministrate || careType.IsAuthorized( Authorization.ADMINISTRATE, RequestContext.CurrentPerson ) ) )
+                else
                 {
-                    return ActionBadRequest( "Not authorized to delete this care type." );
+                    box.ErrorMessage = EditModeMessage.NotAuthorizedToEdit( CareType.FriendlyTypeName );
                 }
-
-                if ( !service.CanDelete( careType, out var errorMessage ) )
-                {
-                    return ActionBadRequest( errorMessage );
-                }
-
-                service.Delete( careType );
-                rockContext.SaveChanges();
-
-                return ActionOk( this.GetParentPageUrl() );
             }
+
+            PrepareDetailBox( box, entity );
         }
 
-        [BlockAction]
-        public BlockActionResult Copy( string key )
+        /// <summary>
+        /// Gets the entity bag that is common between both view and edit modes.
+        /// </summary>
+        /// <param name="entity">The entity to be represented as a bag.</param>
+        /// <returns>A <see cref="CareTypeBag"/> that represents the entity.</returns>
+        private CareTypeBag GetCommonEntityBag( CareType entity )
         {
-            using ( var rockContext = new RockContext() )
-            {
-                var service = new CareTypeService( rockContext );
-                var careType = service.Get( key, !PageCache.Layout.Site.DisablePredictableIds );
-
-                if ( careType == null )
-                {
-                    return ActionBadRequest( "Care Type not found." );
-                }
-
-                if ( !( UserCanAdministrate || careType.IsAuthorized( Authorization.ADMINISTRATE, RequestContext.CurrentPerson ) ) )
-                {
-                    return ActionBadRequest( "Not authorized to copy this care type." );
-                }
-
-                var copiedId = service.Copy( careType.Id );
-                var url = this.LinkedPageUrl( PageCache.Guid, new Dictionary<string, string>
-                {
-                    [PageParameterKey.CareTypeId] = copiedId.ToString()
-                } );
-
-                return ActionOk( url );
-            }
-        }
-
-        [BlockAction]
-        public BlockActionResult SaveAttribute( string careTypeKey, CareTypeAttributeBag bag )
-        {
-            using ( var rockContext = new RockContext() )
-            {
-                var careTypeService = new CareTypeService( rockContext );
-                var careType = careTypeService.Get( careTypeKey, !PageCache.Layout.Site.DisablePredictableIds );
-
-                if ( careType == null )
-                {
-                    return ActionBadRequest( "Care Type not found." );
-                }
-
-                if ( !( UserCanAdministrate || careType.IsAuthorized( Authorization.ADMINISTRATE, RequestContext.CurrentPerson ) ) )
-                {
-                    return ActionBadRequest( "Not authorized to edit care type attributes." );
-                }
-
-                var attributeService = new AttributeService( rockContext );
-                var attribute = bag.Guid.AsGuidOrNull().HasValue
-                    ? attributeService.Get( bag.Guid.AsGuid() )
-                    : new Rock.Model.Attribute
-                    {
-                        EntityTypeId = new CareTypeItem().TypeId,
-                        EntityTypeQualifierColumn = "CareTypeId",
-                        EntityTypeQualifierValue = careType.Id.ToString()
-                    };
-
-                if ( attribute == null )
-                {
-                    return ActionBadRequest( "Attribute not found." );
-                }
-
-                attribute.Name = bag.Name;
-                attribute.Key = bag.Key;
-                attribute.Description = bag.Description;
-                attribute.FieldTypeId = bag.FieldTypeId;
-                attribute.IsRequired = bag.IsRequired;
-                attribute.IsGridColumn = bag.IsGridColumn;
-                attribute.AllowSearch = bag.AllowSearch;
-                attribute.Order = bag.Order;
-
-                if ( !attribute.IsValid )
-                {
-                    return ActionBadRequest( attribute.ValidationResults.Select( v => v.ErrorMessage ).FirstOrDefault() ?? "Attribute is not valid." );
-                }
-
-                if ( attribute.Id == 0 )
-                {
-                    attributeService.Add( attribute );
-                }
-
-                rockContext.SaveChanges();
-
-                return ActionOk( GetCareTypeAttributes( careType.Id, rockContext ) );
-            }
-        }
-
-        [BlockAction]
-        public BlockActionResult DeleteAttribute( string careTypeKey, string attributeGuid )
-        {
-            using ( var rockContext = new RockContext() )
-            {
-                var careTypeService = new CareTypeService( rockContext );
-                var careType = careTypeService.Get( careTypeKey, !PageCache.Layout.Site.DisablePredictableIds );
-
-                if ( careType == null )
-                {
-                    return ActionBadRequest( "Care Type not found." );
-                }
-
-                if ( !( UserCanAdministrate || careType.IsAuthorized( Authorization.ADMINISTRATE, RequestContext.CurrentPerson ) ) )
-                {
-                    return ActionBadRequest( "Not authorized to edit care type attributes." );
-                }
-
-                var attribute = new AttributeService( rockContext ).Get( attributeGuid.AsGuid() );
-                if ( attribute == null )
-                {
-                    return ActionBadRequest( "Attribute not found." );
-                }
-
-                if ( attribute.EntityTypeQualifierColumn != "CareTypeId" || attribute.EntityTypeQualifierValue != careType.Id.ToString() )
-                {
-                    return ActionBadRequest( "Attribute does not belong to this care type." );
-                }
-
-                new AttributeService( rockContext ).Delete( attribute );
-                rockContext.SaveChanges();
-
-                return ActionOk( GetCareTypeAttributes( careType.Id, rockContext ) );
-            }
-        }
-
-        private List<CareTypeAttributeBag> GetCareTypeAttributes( int careTypeId, RockContext rockContext )
-        {
-            return new AttributeService( rockContext )
-                .GetByEntityTypeId( new CareTypeItem().TypeId, true )
-                .Where( a =>
-                    a.EntityTypeQualifierColumn.Equals( "CareTypeId", System.StringComparison.OrdinalIgnoreCase )
-                    && a.EntityTypeQualifierValue == careTypeId.ToString() )
-                .OrderBy( a => a.Order )
-                .ThenBy( a => a.Name )
-                .Select( a => new CareTypeAttributeBag
-                {
-                    Guid = a.Guid.ToString(),
-                    Name = a.Name,
-                    Key = a.Key,
-                    Description = a.Description,
-                    FieldTypeId = a.FieldTypeId,
-                    FieldTypeName = FieldTypeCache.Get( a.FieldTypeId ) != null ? FieldTypeCache.Get( a.FieldTypeId ).Name : string.Empty,
-                    IsRequired = a.IsRequired,
-                    IsGridColumn = a.IsGridColumn,
-                    AllowSearch = a.AllowSearch,
-                    Order = a.Order
-                } )
-                .ToList();
-        }
-
-        private CareType GetCareTypeFromPage( RockContext rockContext )
-        {
-            var careTypeId = PageParameter( PageParameterKey.CareTypeId ).AsIntegerOrNull();
-            if ( !careTypeId.HasValue || careTypeId.Value <= 0 )
+            if ( entity == null )
             {
                 return null;
             }
 
-            return new CareTypeService( rockContext ).Get( careTypeId.Value );
+            return new CareTypeBag
+            {
+                IdKey = entity.IdKey,
+                Description = entity.Description,
+                IsActive = entity.IsActive,
+                Name = entity.Name
+            };
         }
 
-        public class CareTypeBag
+        /// <inheritdoc/>
+        protected override CareTypeBag GetEntityBagForView( CareType entity )
         {
-            public int Id { get; set; }
-            public string IdKey { get; set; }
-            public string Name { get; set; }
-            public string Description { get; set; }
-            public bool IsActive { get; set; }
+            if ( entity == null )
+            {
+                return null;
+            }
+
+            var bag = GetCommonEntityBag( entity );
+
+            if ( entity.Attributes == null )
+            {
+                entity.LoadAttributes( RockContext );
+            }
+
+            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson, enforceSecurity: true );
+
+            return bag;
         }
 
-        public class CareTypeAttributeBag
+        /// <inheritdoc/>
+        protected override CareTypeBag GetEntityBagForEdit( CareType entity )
         {
-            public string Guid { get; set; }
-            public string Name { get; set; }
-            public string Key { get; set; }
-            public string Description { get; set; }
-            public int FieldTypeId { get; set; }
-            public string FieldTypeName { get; set; }
-            public bool IsRequired { get; set; }
-            public bool IsGridColumn { get; set; }
-            public bool AllowSearch { get; set; }
-            public int Order { get; set; }
+            if ( entity == null )
+            {
+                return null;
+            }
+
+            var bag = GetCommonEntityBag( entity );
+
+            if ( entity.Attributes == null )
+            {
+                entity.LoadAttributes( RockContext );
+            }
+
+            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson, enforceSecurity: true );
+
+            return bag;
         }
+
+        /// <inheritdoc/>
+        protected override bool UpdateEntityFromBox( CareType entity, ValidPropertiesBox<CareTypeBag> box )
+        {
+            if ( box.ValidProperties == null )
+            {
+                return false;
+            }
+
+            box.IfValidProperty( nameof( box.Bag.Description ),
+                () => entity.Description = box.Bag.Description );
+
+            box.IfValidProperty( nameof( box.Bag.IsActive ),
+                () => entity.IsActive = box.Bag.IsActive );
+
+            box.IfValidProperty( nameof( box.Bag.Name ),
+                () => entity.Name = box.Bag.Name );
+
+            box.IfValidProperty( nameof( box.Bag.AttributeValues ),
+                () =>
+                {
+                    entity.LoadAttributes( RockContext );
+
+                    entity.SetPublicAttributeValues( box.Bag.AttributeValues, RequestContext.CurrentPerson, enforceSecurity: true );
+                } );
+
+            return true;
+        }
+
+        /// <inheritdoc/>
+        protected override CareType GetInitialEntity()
+        {
+            return GetInitialEntity<CareType, CareTypeService>( RockContext, PageParameterKey.CareTypeId );
+        }
+
+        /// <summary>
+        /// Gets the box navigation URLs required for the page to operate.
+        /// </summary>
+        /// <returns>A dictionary of key names and URL values.</returns>
+        private Dictionary<string, string> GetBoxNavigationUrls()
+        {
+            return new Dictionary<string, string>
+            {
+                [NavigationUrlKey.ParentPage] = this.GetParentPageUrl()
+            };
+        }
+
+        /// <inheritdoc/>
+        protected override bool TryGetEntityForEditAction( string idKey, out CareType entity, out BlockActionResult error )
+        {
+            var entityService = new CareTypeService( RockContext );
+            error = null;
+
+            // Determine if we are editing an existing entity or creating a new one.
+            if ( idKey.IsNotNullOrWhiteSpace() )
+            {
+                // If editing an existing entity then load it and make sure it
+                // was found and can still be edited.
+                entity = entityService.Get( idKey, !PageCache.Layout.Site.DisablePredictableIds );
+            }
+            else
+            {
+                // Create a new entity.
+                entity = new CareType();
+                entityService.Add( entity );
+            }
+
+            if ( entity == null )
+            {
+                error = ActionBadRequest( $"{CareType.FriendlyTypeName} not found." );
+                return false;
+            }
+
+            if ( !entity.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson ) )
+            {
+                error = ActionBadRequest( $"Not authorized to edit ${CareType.FriendlyTypeName}." );
+                return false;
+            }
+
+            return true;
+        }
+
+        #endregion
+
+        #region Block Actions
+
+        /// <summary>
+        /// Gets the box that will contain all the information needed to begin
+        /// the edit operation.
+        /// </summary>
+        /// <param name="key">The identifier of the entity to be edited.</param>
+        /// <returns>A box that contains the entity and any other information required.</returns>
+        [BlockAction]
+        public BlockActionResult Edit( string key )
+        {
+            if ( !TryGetEntityForEditAction( key, out var entity, out var actionError ) )
+            {
+                return actionError;
+            }
+
+            entity.LoadAttributes( RockContext );
+
+            var bag = GetEntityBagForEdit( entity );
+
+            return ActionOk( new ValidPropertiesBox<CareTypeBag>
+            {
+                Bag = bag,
+                ValidProperties = bag.GetType().GetProperties().Select( p => p.Name ).ToList()
+            } );
+        }
+
+        /// <summary>
+        /// Saves the entity contained in the box.
+        /// </summary>
+        /// <param name="box">The box that contains all the information required to save.</param>
+        /// <returns>A new entity bag to be used when returning to view mode, or the URL to redirect to after creating a new entity.</returns>
+        [BlockAction]
+        public BlockActionResult Save( ValidPropertiesBox<CareTypeBag> box )
+        {
+            var entityService = new CareTypeService( RockContext );
+
+            if ( !TryGetEntityForEditAction( box.Bag.IdKey, out var entity, out var actionError ) )
+            {
+                return actionError;
+            }
+
+            // Update the entity instance from the information in the bag.
+            if ( !UpdateEntityFromBox( entity, box ) )
+            {
+                return ActionBadRequest( "Invalid data." );
+            }
+
+            // Ensure everything is valid before saving.
+            if ( !ValidateCareType( entity, out var validationMessage ) )
+            {
+                return ActionBadRequest( validationMessage );
+            }
+
+            var isNew = entity.Id == 0;
+
+            RockContext.WrapTransaction( () =>
+            {
+                RockContext.SaveChanges();
+                entity.SaveAttributeValues( RockContext );
+            } );
+
+            if ( isNew )
+            {
+                return ActionContent( System.Net.HttpStatusCode.Created, this.GetCurrentPageUrl( new Dictionary<string, string>
+                {
+                    [PageParameterKey.CareTypeId] = entity.IdKey
+                } ) );
+            }
+
+            // Ensure navigation properties will work now.
+            entity = entityService.Get( entity.Id );
+            entity.LoadAttributes( RockContext );
+
+            var bag = GetEntityBagForEdit( entity );
+
+            return ActionOk( new ValidPropertiesBox<CareTypeBag>
+            {
+                Bag = bag,
+                ValidProperties = bag.GetType().GetProperties().Select( p => p.Name ).ToList()
+            } );
+        }
+
+        /// <summary>
+        /// Deletes the specified entity.
+        /// </summary>
+        /// <param name="key">The identifier of the entity to be deleted.</param>
+        /// <returns>A string that contains the URL to be redirected to on success.</returns>
+        [BlockAction]
+        public BlockActionResult Delete( string key )
+        {
+            var entityService = new CareTypeService( RockContext );
+
+            if ( !TryGetEntityForEditAction( key, out var entity, out var actionError ) )
+            {
+                return actionError;
+            }
+
+            entityService.Delete( entity );
+            RockContext.SaveChanges();
+
+            return ActionOk( this.GetParentPageUrl() );
+        }
+
+        #endregion
     }
 }

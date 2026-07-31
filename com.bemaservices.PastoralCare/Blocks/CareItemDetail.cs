@@ -1,420 +1,408 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Data.Entity;
 using System.Linq;
 
 using Rock;
 using Rock.Attribute;
 using Rock.Blocks;
+using Rock.Constants;
 using Rock.Data;
+using Rock.Model;
 using Rock.Security;
+using Rock.ViewModels.Blocks;
 using Rock.ViewModels.Utility;
+using Rock.Web.Cache;
 
 using com.bemaservices.PastoralCare.Model;
+using com.bemaservices.PastoralCare.ViewModels;
 
 namespace com.bemaservices.PastoralCare.Blocks
 {
+    /// <summary>
+    /// Displays the details of a particular care item.
+    /// </summary>
+
     [DisplayName( "Care Item Detail" )]
-    [Category( "BEMA Services > Pastoral Care" )]
-    [Description( "Displays the details of the given care item for editing." )]
-    [IconCssClass( "fa fa-user" )]
+    [Category( "BEMA Software Services > Pastoral Care" )]
+    [Description( "Displays the details of a particular care item." )]
+    [IconCssClass( "fa fa-question" )]
     [SupportedSiteTypes( SiteType.Web )]
 
-    [LinkedPage( "Person Profile Page", "Page used for viewing a person's profile.", false, Key = AttributeKey.PersonProfilePage, Order = 0 )]
-    [BadgesField( "Badges", "The person badges to display in this block.", false, "", "", 1, Key = AttributeKey.Badges )]
-    [BooleanField( "Default Request Time to Current Time", "Defaults the Request Date and Time to current date and time.", false, "", 2, Key = AttributeKey.DefaultRequestTimetoCurrentTime )]
-    [BooleanField( "Allow Requester Self Selection", "Allows the person filling out the form to select themselves as the requestor.", false, "", 3, Key = AttributeKey.AllowRequesterSelfSelection )]
+    #region Block Attributes
 
-    [Rock.SystemGuid.EntityTypeGuid( "f426d8bf-5387-452d-b264-0075cd5865d2" )]
-    [Rock.SystemGuid.BlockTypeGuid( "c2a7dc2e-81a9-4ce8-86d1-a90f87df36e2" )]
-    public class CareItemDetail : RockBlockType
+    #endregion
+
+    [Rock.SystemGuid.EntityTypeGuid( "c883850c-d9d8-4fa9-a337-0b2ba639a3c3" )]
+    [Rock.SystemGuid.BlockTypeGuid( "8e91198e-ba25-48ba-acd7-1c339ea328a0" )]
+    public class CareItemDetail : RockEntityDetailBlockType<CareItem, CareItemBag>
     {
-        private static class AttributeKey
-        {
-            public const string PersonProfilePage = "PersonProfilePage";
-            public const string Badges = "Badges";
-            public const string DefaultRequestTimetoCurrentTime = "DefaultRequestTimetoCurrentTime";
-            public const string AllowRequesterSelfSelection = "AllowRequesterSelfSelection";
-        }
+        #region Keys
 
         private static class PageParameterKey
         {
             public const string CareItemId = "CareItemId";
-            public const string CareTypeId = "CareTypeId";
-            public const string PersonId = "PersonId";
         }
 
+        private static class NavigationUrlKey
+        {
+            public const string ParentPage = "ParentPage";
+        }
+
+        #endregion Keys
+
+        #region Properties
+
+        /// <inheritdoc/>
         public override string ObsidianFileUrl => "~/Plugins/com_bemaservices/PastoralCare/careItemDetail.obs";
 
+        #endregion
+
+        #region Methods
+
+        /// <inheritdoc/>
         public override object GetObsidianBlockInitialization()
         {
-            using ( var rockContext = new RockContext() )
-            {
-                var careItemId = PageParameter( PageParameterKey.CareItemId ).AsIntegerOrNull() ?? 0;
-                var careTypeId = PageParameter( PageParameterKey.CareTypeId ).AsIntegerOrNull();
-                var personId = PageParameter( PageParameterKey.PersonId ).AsIntegerOrNull();
+            var box = new DetailBlockBox<CareItemBag, CareItemDetailOptionsBag>();
 
-                var careTypeOptions = new CareTypeService( rockContext )
-                    .Queryable()
-                    .AsNoTracking()
-                    .OrderBy( ct => ct.Name )
-                    .ToList()
-                    .Where( ct => UserCanEdit || ct.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson ) )
-                    .Select( ct => new ListItemBag
-                    {
-                        Value = ct.Id.ToString(),
-                        Text = ct.Name
-                    } )
-                    .ToList();
+            SetBoxInitialEntityState( box );
 
-                var careItem = careItemId > 0
-                    ? new CareItemService( rockContext )
-                        .Queryable()
-                        .Include( ci => ci.PersonAlias.Person )
-                        .Include( ci => ci.ContactorPersonAlias.Person )
-                        .Include( ci => ci.CareTypeItems.Select( cti => cti.CareType ) )
-                        .Include( ci => ci.CareContacts.Select( cc => cc.ContactorPersonAlias.Person ) )
-                        .FirstOrDefault( ci => ci.Id == careItemId )
-                    : null;
+            box.NavigationUrls = GetBoxNavigationUrls();
+            box.Options = GetBoxOptions( box.IsEditable );
 
-                var defaultDate = GetAttributeValue( AttributeKey.DefaultRequestTimetoCurrentTime ).AsBoolean()
-                    ? RockDateTime.Now
-                    : (DateTime?) null;
-
-                var bag = careItem != null
-                    ? new CareItemBag
-                    {
-                        Id = careItem.Id,
-                        IdKey = careItem.IdKey,
-                        PersonId = careItem.PersonAlias?.PersonId,
-                        PersonName = careItem.PersonAlias?.Person?.FullName,
-                        ContactorId = careItem.ContactorPersonAlias?.PersonId,
-                        ContactorName = careItem.ContactorPersonAlias?.Person?.FullName,
-                        ContactDateTime = careItem.ContactDateTime,
-                        Description = careItem.Description,
-                        IsActive = careItem.IsActive,
-                        CareTypeIds = careItem.CareTypeItems.Select( cti => cti.CareTypeId ).ToList(),
-                        Contacts = BuildContactBags( careItem, careItem.CareContacts.ToList() )
-                    }
-                    : new CareItemBag
-                    {
-                        Id = 0,
-                        PersonId = personId,
-                        ContactDateTime = defaultDate,
-                        IsActive = true,
-                        CareTypeIds = careTypeId.HasValue ? new List<int> { careTypeId.Value } : new List<int>(),
-                        Contacts = new List<CareContactBag>()
-                    };
-
-                return new
-                {
-                    entity = bag,
-                    options = new
-                    {
-                        careTypes = careTypeOptions,
-                        allowRequesterSelfSelection = GetAttributeValue( AttributeKey.AllowRequesterSelfSelection ).AsBoolean()
-                    },
-                    isEditable = true,
-                    parentPageUrl = this.GetParentPageUrl()
-                };
-            }
+            return box;
         }
 
-        [BlockAction]
-        public BlockActionResult Save( CareItemBag bag )
+        /// <summary>
+        /// Gets the box options required for the component to render the view
+        /// or edit the entity.
+        /// </summary>
+        /// <param name="isEditable"><c>true</c> if the entity is editable; otherwise <c>false</c>.</param>
+        /// <returns>The options that provide additional details to the block.</returns>
+        private CareItemDetailOptionsBag GetBoxOptions( bool isEditable )
         {
-            using ( var rockContext = new RockContext() )
-            {
-                var careItemService = new CareItemService( rockContext );
-                var careTypeItemService = new CareTypeItemService( rockContext );
-                var personAliasService = new Rock.Model.PersonAliasService( rockContext );
+            var options = new CareItemDetailOptionsBag();
 
-                CareItem careItem;
-                if ( bag.Id <= 0 && bag.IdKey.IsNullOrWhiteSpace() )
+            return options;
+        }
+
+        /// <summary>
+        /// Validates the CareItem for any final information that might not be
+        /// valid after storing all the data from the client.
+        /// </summary>
+        /// <param name="careItem">The CareItem to be validated.</param>
+        /// <param name="errorMessage">On <c>false</c> return, contains the error message.</param>
+        /// <returns><c>true</c> if the CareItem is valid, <c>false</c> otherwise.</returns>
+        private bool ValidateCareItem( CareItem careItem, out string errorMessage )
+        {
+            errorMessage = null;
+
+            return true;
+        }
+
+        /// <summary>
+        /// Sets the initial entity state of the box. Populates the Entity or
+        /// ErrorMessage properties depending on the entity and permissions.
+        /// </summary>
+        /// <param name="box">The box to be populated.</param>
+        private void SetBoxInitialEntityState( DetailBlockBox<CareItemBag, CareItemDetailOptionsBag> box )
+        {
+            var entity = GetInitialEntity();
+
+            if ( entity == null )
+            {
+                box.ErrorMessage = $"The {CareItem.FriendlyTypeName} was not found.";
+                return;
+            }
+
+            var isViewable = entity.IsAuthorized( Authorization.VIEW, RequestContext.CurrentPerson );
+            box.IsEditable = entity.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson );
+
+            if ( entity.Id != 0 )
+            {
+                // Existing entity was found, prepare for view mode by default.
+                if ( isViewable )
                 {
-                    careItem = new CareItem();
-                    careItemService.Add( careItem );
+                    box.Entity = GetEntityBagForView( entity );
                 }
                 else
                 {
-                    careItem = bag.Id > 0
-                        ? careItemService.Get( bag.Id )
-                        : careItemService.Get( bag.IdKey, !PageCache.Layout.Site.DisablePredictableIds );
+                    box.ErrorMessage = EditModeMessage.NotAuthorizedToView( CareItem.FriendlyTypeName );
                 }
-
-                if ( careItem == null )
+            }
+            else
+            {
+                // New entity is being created, prepare for edit mode by default.
+                if ( box.IsEditable )
                 {
-                    return ActionBadRequest( "Care Item not found." );
+                    box.Entity = GetEntityBagForEdit( entity );
                 }
-
-                if ( !bag.PersonId.HasValue )
+                else
                 {
-                    return ActionBadRequest( "A person is required." );
+                    box.ErrorMessage = EditModeMessage.NotAuthorizedToEdit( CareItem.FriendlyTypeName );
                 }
+            }
 
-                if ( !bag.ContactorId.HasValue )
+            PrepareDetailBox( box, entity );
+        }
+
+        /// <summary>
+        /// Gets the entity bag that is common between both view and edit modes.
+        /// </summary>
+        /// <param name="entity">The entity to be represented as a bag.</param>
+        /// <returns>A <see cref="CareItemBag"/> that represents the entity.</returns>
+        private CareItemBag GetCommonEntityBag( CareItem entity )
+        {
+            if ( entity == null )
+            {
+                return null;
+            }
+
+            return new CareItemBag
+            {
+                IdKey = entity.IdKey,
+                ContactDateTime = entity.ContactDateTime,
+                ContactorPersonAlias = entity.ContactorPersonAlias.ToListItemBag(),
+                Description = entity.Description,
+                IsActive = entity.IsActive,
+                LastCareContact = entity.LastCareContact.ToListItemBag(),
+                PersonAlias = entity.PersonAlias.ToListItemBag()
+            };
+        }
+
+        /// <inheritdoc/>
+        protected override CareItemBag GetEntityBagForView( CareItem entity )
+        {
+            if ( entity == null )
+            {
+                return null;
+            }
+
+            var bag = GetCommonEntityBag( entity );
+
+            if ( entity.Attributes == null )
+            {
+                entity.LoadAttributes( RockContext );
+            }
+
+            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson, enforceSecurity: true );
+
+            return bag;
+        }
+
+        /// <inheritdoc/>
+        protected override CareItemBag GetEntityBagForEdit( CareItem entity )
+        {
+            if ( entity == null )
+            {
+                return null;
+            }
+
+            var bag = GetCommonEntityBag( entity );
+
+            if ( entity.Attributes == null )
+            {
+                entity.LoadAttributes( RockContext );
+            }
+
+            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson, enforceSecurity: true );
+
+            return bag;
+        }
+
+        /// <inheritdoc/>
+        protected override bool UpdateEntityFromBox( CareItem entity, ValidPropertiesBox<CareItemBag> box )
+        {
+            if ( box.ValidProperties == null )
+            {
+                return false;
+            }
+
+            box.IfValidProperty( nameof( box.Bag.ContactDateTime ),
+                () => entity.ContactDateTime = box.Bag.ContactDateTime );
+
+            box.IfValidProperty( nameof( box.Bag.ContactorPersonAlias ),
+                () => entity.ContactorPersonAliasId = box.Bag.ContactorPersonAlias.GetEntityId<PersonAlias>( RockContext ) );
+
+            box.IfValidProperty( nameof( box.Bag.Description ),
+                () => entity.Description = box.Bag.Description );
+
+            box.IfValidProperty( nameof( box.Bag.IsActive ),
+                () => entity.IsActive = box.Bag.IsActive );
+
+            box.IfValidProperty( nameof( box.Bag.PersonAlias ),
+                () => entity.PersonAliasId = box.Bag.PersonAlias.GetEntityId<PersonAlias>( RockContext ) );
+
+            box.IfValidProperty( nameof( box.Bag.AttributeValues ),
+                () =>
                 {
-                    return ActionBadRequest( "A requester is required." );
-                }
+                    entity.LoadAttributes( RockContext );
 
-                var personAliasId = personAliasService.GetPrimaryAliasId( bag.PersonId.Value );
-                var contactorAliasId = personAliasService.GetPrimaryAliasId( bag.ContactorId.Value );
-
-                if ( !personAliasId.HasValue || !contactorAliasId.HasValue )
-                {
-                    return ActionBadRequest( "Could not resolve one or more person aliases." );
-                }
-
-                careItem.PersonAliasId = personAliasId.Value;
-                careItem.ContactorPersonAliasId = contactorAliasId.Value;
-                careItem.ContactDateTime = bag.ContactDateTime ?? RockDateTime.Now;
-                careItem.Description = bag.Description?.SanitizeHtml();
-                careItem.IsActive = bag.IsActive;
-
-                var selectedCareTypeIds = bag.CareTypeIds ?? new List<int>();
-                if ( !selectedCareTypeIds.Any() )
-                {
-                    return ActionBadRequest( "At least one care type is required." );
-                }
-
-                rockContext.WrapTransaction( () =>
-                {
-                    rockContext.SaveChanges();
-
-                    var existingTypeItems = careTypeItemService.Queryable()
-                        .Where( cti => cti.CareItemId == careItem.Id )
-                        .ToList();
-
-                    foreach ( var existingTypeItem in existingTypeItems.Where( eti => !selectedCareTypeIds.Contains( eti.CareTypeId ) ).ToList() )
-                    {
-                        careTypeItemService.Delete( existingTypeItem );
-                    }
-
-                    foreach ( var careTypeId in selectedCareTypeIds.Distinct() )
-                    {
-                        if ( !existingTypeItems.Any( eti => eti.CareTypeId == careTypeId ) )
-                        {
-                            careTypeItemService.Add( new CareTypeItem
-                            {
-                                CareItemId = careItem.Id,
-                                CareTypeId = careTypeId
-                            } );
-                        }
-                    }
-
-                    rockContext.SaveChanges();
+                    entity.SetPublicAttributeValues( box.Bag.AttributeValues, RequestContext.CurrentPerson, enforceSecurity: true );
                 } );
 
-                return ActionOk( new { id = careItem.Id, idKey = careItem.IdKey } );
-            }
+            return true;
         }
 
+        /// <inheritdoc/>
+        protected override CareItem GetInitialEntity()
+        {
+            return GetInitialEntity<CareItem, CareItemService>( RockContext, PageParameterKey.CareItemId );
+        }
+
+        /// <summary>
+        /// Gets the box navigation URLs required for the page to operate.
+        /// </summary>
+        /// <returns>A dictionary of key names and URL values.</returns>
+        private Dictionary<string, string> GetBoxNavigationUrls()
+        {
+            return new Dictionary<string, string>
+            {
+                [NavigationUrlKey.ParentPage] = this.GetParentPageUrl()
+            };
+        }
+
+        /// <inheritdoc/>
+        protected override bool TryGetEntityForEditAction( string idKey, out CareItem entity, out BlockActionResult error )
+        {
+            var entityService = new CareItemService( RockContext );
+            error = null;
+
+            // Determine if we are editing an existing entity or creating a new one.
+            if ( idKey.IsNotNullOrWhiteSpace() )
+            {
+                // If editing an existing entity then load it and make sure it
+                // was found and can still be edited.
+                entity = entityService.Get( idKey, !PageCache.Layout.Site.DisablePredictableIds );
+            }
+            else
+            {
+                // Create a new entity.
+                entity = new CareItem();
+                entityService.Add( entity );
+            }
+
+            if ( entity == null )
+            {
+                error = ActionBadRequest( $"{CareItem.FriendlyTypeName} not found." );
+                return false;
+            }
+
+            if ( !entity.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson ) )
+            {
+                error = ActionBadRequest( $"Not authorized to edit ${CareItem.FriendlyTypeName}." );
+                return false;
+            }
+
+            return true;
+        }
+
+        #endregion
+
+        #region Block Actions
+
+        /// <summary>
+        /// Gets the box that will contain all the information needed to begin
+        /// the edit operation.
+        /// </summary>
+        /// <param name="key">The identifier of the entity to be edited.</param>
+        /// <returns>A box that contains the entity and any other information required.</returns>
         [BlockAction]
-        public BlockActionResult GetContacts( string careItemKey )
+        public BlockActionResult Edit( string key )
         {
-            using ( var rockContext = new RockContext() )
+            if ( !TryGetEntityForEditAction( key, out var entity, out var actionError ) )
             {
-                var careItem = new CareItemService( rockContext )
-                    .Queryable()
-                    .Include( ci => ci.CareContacts.Select( cc => cc.ContactorPersonAlias.Person ) )
-                    .FirstOrDefault( ci => ci.IdKey == careItemKey || ci.Id.ToString() == careItemKey );
-
-                if ( careItem == null )
-                {
-                    return ActionBadRequest( "Care Item not found." );
-                }
-
-                return ActionOk( BuildContactBags( careItem, careItem.CareContacts.ToList() ) );
+                return actionError;
             }
+
+            entity.LoadAttributes( RockContext );
+
+            var bag = GetEntityBagForEdit( entity );
+
+            return ActionOk( new ValidPropertiesBox<CareItemBag>
+            {
+                Bag = bag,
+                ValidProperties = bag.GetType().GetProperties().Select( p => p.Name ).ToList()
+            } );
         }
 
+        /// <summary>
+        /// Saves the entity contained in the box.
+        /// </summary>
+        /// <param name="box">The box that contains all the information required to save.</param>
+        /// <returns>A new entity bag to be used when returning to view mode, or the URL to redirect to after creating a new entity.</returns>
         [BlockAction]
-        public BlockActionResult SaveContact( string careItemKey, CareContactBag bag )
+        public BlockActionResult Save( ValidPropertiesBox<CareItemBag> box )
         {
-            using ( var rockContext = new RockContext() )
+            var entityService = new CareItemService( RockContext );
+
+            if ( !TryGetEntityForEditAction( box.Bag.IdKey, out var entity, out var actionError ) )
             {
-                var careItemService = new CareItemService( rockContext );
-                var contactService = new CareContactService( rockContext );
-                var personAliasService = new Rock.Model.PersonAliasService( rockContext );
-
-                var careItem = careItemService.Get( careItemKey, !PageCache.Layout.Site.DisablePredictableIds );
-                if ( careItem == null )
-                {
-                    return ActionBadRequest( "Care Item not found." );
-                }
-
-                var isEditAllowed = UserCanEdit || careItem.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson );
-
-                var contact = bag.Id > 0
-                    ? contactService.Get( bag.Id )
-                    : new CareContact { CareItemId = careItem.Id };
-
-                if ( contact == null )
-                {
-                    return ActionBadRequest( "Contact not found." );
-                }
-
-                if ( contact.Id > 0 && !CanEditContact( contact, isEditAllowed ) )
-                {
-                    return ActionBadRequest( "Not authorized to edit this contact." );
-                }
-
-                if ( bag.ContactorId.HasValue )
-                {
-                    var contactorAliasId = personAliasService.GetPrimaryAliasId( bag.ContactorId.Value );
-                    if ( contactorAliasId.HasValue )
-                    {
-                        contact.ContactorPersonAliasId = contactorAliasId.Value;
-                    }
-                }
-
-                contact.ContactDateTime = bag.ContactDateTime ?? RockDateTime.Now;
-                contact.Description = bag.Description?.SanitizeHtml();
-
-                if ( contact.Id == 0 )
-                {
-                    contactService.Add( contact );
-                }
-
-                rockContext.SaveChanges();
-
-                var reloaded = contactService.Queryable()
-                    .Include( cc => cc.ContactorPersonAlias.Person )
-                    .FirstOrDefault( cc => cc.Id == contact.Id );
-
-                var result = new CareContactBag
-                {
-                    Id = reloaded.Id,
-                    ContactorId = reloaded.ContactorPersonAlias?.PersonId,
-                    ContactorName = reloaded.ContactorPersonAlias?.Person?.FullNameReversed,
-                    ContactDateTime = reloaded.ContactDateTime,
-                    Description = reloaded.Description,
-                    CanEdit = CanEditContact( reloaded, isEditAllowed )
-                };
-
-                return ActionOk( result );
+                return actionError;
             }
+
+            // Update the entity instance from the information in the bag.
+            if ( !UpdateEntityFromBox( entity, box ) )
+            {
+                return ActionBadRequest( "Invalid data." );
+            }
+
+            // Ensure everything is valid before saving.
+            if ( !ValidateCareItem( entity, out var validationMessage ) )
+            {
+                return ActionBadRequest( validationMessage );
+            }
+
+            var isNew = entity.Id == 0;
+
+            RockContext.WrapTransaction( () =>
+            {
+                RockContext.SaveChanges();
+                entity.SaveAttributeValues( RockContext );
+            } );
+
+            if ( isNew )
+            {
+                return ActionContent( System.Net.HttpStatusCode.Created, this.GetCurrentPageUrl( new Dictionary<string, string>
+                {
+                    [PageParameterKey.CareItemId] = entity.IdKey
+                } ) );
+            }
+
+            // Ensure navigation properties will work now.
+            entity = entityService.Get( entity.Id );
+            entity.LoadAttributes( RockContext );
+
+            var bag = GetEntityBagForEdit( entity );
+
+            return ActionOk( new ValidPropertiesBox<CareItemBag>
+            {
+                Bag = bag,
+                ValidProperties = bag.GetType().GetProperties().Select( p => p.Name ).ToList()
+            } );
         }
 
+        /// <summary>
+        /// Deletes the specified entity.
+        /// </summary>
+        /// <param name="key">The identifier of the entity to be deleted.</param>
+        /// <returns>A string that contains the URL to be redirected to on success.</returns>
         [BlockAction]
-        public BlockActionResult DeleteContact( string careItemKey, int contactId )
+        public BlockActionResult Delete( string key )
         {
-            using ( var rockContext = new RockContext() )
+            var entityService = new CareItemService( RockContext );
+
+            if ( !TryGetEntityForEditAction( key, out var entity, out var actionError ) )
             {
-                var contactService = new CareContactService( rockContext );
-                var contact = contactService.Get( contactId );
-                var careItem = new CareItemService( rockContext ).Get( careItemKey, !PageCache.Layout.Site.DisablePredictableIds );
-
-                if ( contact == null )
-                {
-                    return ActionBadRequest( "Contact not found." );
-                }
-
-                if ( careItem == null )
-                {
-                    return ActionBadRequest( "Care Item not found." );
-                }
-
-                var isEditAllowed = UserCanEdit || careItem.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson );
-                if ( !CanEditContact( contact, isEditAllowed ) )
-                {
-                    return ActionBadRequest( "Not authorized to delete this contact." );
-                }
-
-                contactService.Delete( contact );
-                rockContext.SaveChanges();
-
-                return ActionOk();
-            }
-        }
-
-        [BlockAction]
-        public BlockActionResult SearchPeople( string search )
-        {
-            using ( var rockContext = new RockContext() )
-            {
-                var qry = new Rock.Model.PersonService( rockContext )
-                    .Queryable()
-                    .AsNoTracking()
-                    .Where( p => !p.IsDeceased );
-
-                if ( search.IsNotNullOrWhiteSpace() )
-                {
-                    qry = qry.Where( p => p.NickName.Contains( search ) || p.LastName.Contains( search ) );
-                }
-
-                var result = qry
-                    .OrderBy( p => p.LastName )
-                    .ThenBy( p => p.NickName )
-                    .Take( 25 )
-                    .ToList()
-                    .Select( p => new ListItemBag
-                    {
-                        Value = p.Id.ToString(),
-                        Text = p.FullNameReversed
-                    } )
-                    .ToList();
-
-                return ActionOk( result );
-            }
-        }
-
-        private List<CareContactBag> BuildContactBags( CareItem careItem, List<CareContact> contacts )
-        {
-            var isEditAllowed = UserCanEdit || careItem.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson );
-
-            return contacts
-                .OrderByDescending( cc => cc.ContactDateTime )
-                .Select( cc => new CareContactBag
-                {
-                    Id = cc.Id,
-                    ContactorId = cc.ContactorPersonAlias?.PersonId,
-                    ContactorName = cc.ContactorPersonAlias?.Person?.FullNameReversed,
-                    Description = cc.Description,
-                    ContactDateTime = cc.ContactDateTime,
-                    CanEdit = CanEditContact( cc, isEditAllowed )
-                } )
-                .ToList();
-        }
-
-        private bool CanEditContact( CareContact contact, bool isEditAllowed )
-        {
-            if ( isEditAllowed )
-            {
-                return true;
+                return actionError;
             }
 
-            var currentPersonId = RequestContext.CurrentPerson?.Id;
+            entityService.Delete( entity );
+            RockContext.SaveChanges();
 
-            return currentPersonId.HasValue &&
-                ( contact.CreatedByPersonAlias?.PersonId == currentPersonId.Value
-                    || contact.ContactorPersonAlias?.PersonId == currentPersonId.Value );
+            return ActionOk( this.GetParentPageUrl() );
         }
 
-        public class CareItemBag
-        {
-            public int Id { get; set; }
-            public string IdKey { get; set; }
-            public int? PersonId { get; set; }
-            public string PersonName { get; set; }
-            public int? ContactorId { get; set; }
-            public string ContactorName { get; set; }
-            public DateTime? ContactDateTime { get; set; }
-            public string Description { get; set; }
-            public bool IsActive { get; set; }
-            public List<int> CareTypeIds { get; set; }
-            public List<CareContactBag> Contacts { get; set; }
-        }
-
-        public class CareContactBag
-        {
-            public int Id { get; set; }
-            public int? ContactorId { get; set; }
-            public string ContactorName { get; set; }
-            public DateTime? ContactDateTime { get; set; }
-            public string Description { get; set; }
-            public bool CanEdit { get; set; }
-        }
+        #endregion
     }
 }
