@@ -31,6 +31,20 @@ namespace com.bemaservices.PastoralCare.Blocks
     [LinkedPage( "Detail Page",
         Description = "The page that will show the care type details.",
         Key = AttributeKey.DetailPage )]
+    [BooleanField( "Allow Shared Care Item Attributes",
+        Description = "Displays a link to a page for care item attributes shared across care types.",
+        DefaultBooleanValue = false,
+        Key = AttributeKey.AllowSharedCareItemAttributes )]
+    [LinkedPage( "Shared Care Item Attribute Page",
+        Description = "Page used to view universal care item attributes.",
+        Key = AttributeKey.SharedCareItemAttributePage )]
+    [BooleanField( "Allow Shared Care Contact Attributes",
+        Description = "Displays a link to a page for care contact attributes shared across care types.",
+        DefaultBooleanValue = false,
+        Key = AttributeKey.AllowSharedCareContactAttributes )]
+    [LinkedPage( "Shared Care Contact Attribute Page",
+        Description = "Page used to view universal care contact attributes.",
+        Key = AttributeKey.SharedCareContactAttributePage )]
 
     [Rock.SystemGuid.EntityTypeGuid( "39577b84-5e6f-4582-93ae-0707e56cc4fc" )]
     [Rock.SystemGuid.BlockTypeGuid( "e3e46273-ce72-43da-a130-2f91f97ef21e" )]
@@ -42,11 +56,17 @@ namespace com.bemaservices.PastoralCare.Blocks
         private static class AttributeKey
         {
             public const string DetailPage = "DetailPage";
+            public const string AllowSharedCareItemAttributes = "AllowSharedCareItemAttributes";
+            public const string SharedCareItemAttributePage = "SharedCareItemAttributePage";
+            public const string AllowSharedCareContactAttributes = "AllowSharedCareContactAttributes";
+            public const string SharedCareContactAttributePage = "SharedCareContactAttributePage";
         }
 
         private static class NavigationUrlKey
         {
             public const string DetailPage = "DetailPage";
+            public const string SharedCareItemAttributePage = "SharedCareItemAttributePage";
+            public const string SharedCareContactAttributePage = "SharedCareContactAttributePage";
         }
 
         #endregion Keys
@@ -82,7 +102,11 @@ namespace com.bemaservices.PastoralCare.Blocks
         /// <returns>The options that provide additional details to the block.</returns>
         private CareTypeListOptionsBag GetBoxOptions()
         {
-            var options = new CareTypeListOptionsBag();
+            var options = new CareTypeListOptionsBag
+            {
+                AllowSharedCareItemAttributes = GetAttributeValue( AttributeKey.AllowSharedCareItemAttributes ).AsBoolean(),
+                AllowSharedCareContactAttributes = GetAttributeValue( AttributeKey.AllowSharedCareContactAttributes ).AsBoolean()
+            };
 
             return options;
         }
@@ -106,7 +130,9 @@ namespace com.bemaservices.PastoralCare.Blocks
         {
             return new Dictionary<string, string>
             {
-                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, "CareTypeId", "((Key))" )
+                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, "CareTypeId", "((Key))" ),
+                [NavigationUrlKey.SharedCareItemAttributePage] = this.GetLinkedPageUrl( AttributeKey.SharedCareItemAttributePage ),
+                [NavigationUrlKey.SharedCareContactAttributePage] = this.GetLinkedPageUrl( AttributeKey.SharedCareContactAttributePage )
             };
         }
 

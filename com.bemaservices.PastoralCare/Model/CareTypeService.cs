@@ -61,8 +61,8 @@ namespace com.bemaservices.PastoralCare.Model
             var authService = new AuthService( rockContext );
 
             // Get current Opportunity attributes 
-            var careItemAttributes = attributeService
-                .GetByEntityTypeId( new CareItem().TypeId, true ).AsQueryable()
+            var careTypeAttributes = attributeService
+                .GetByEntityTypeId( new CareTypeItem().TypeId, true ).AsQueryable()
                 .Where( a =>
                     a.EntityTypeQualifierColumn.Equals( "CareTypeId", StringComparison.OrdinalIgnoreCase ) &&
                     a.EntityTypeQualifierValue.Equals( careType.Id.ToString() ) )
@@ -85,7 +85,7 @@ namespace com.bemaservices.PastoralCare.Model
 
                 // Clone the Opportunity attributes
                 List<Rock.Model.Attribute> newAttributesState = new List<Rock.Model.Attribute>();
-                foreach ( var attribute in careItemAttributes )
+                foreach ( var attribute in careTypeAttributes )
                 {
                     var newAttribute = attribute.Clone( false );
                     InitModel( ref newAttribute );
@@ -98,13 +98,13 @@ namespace com.bemaservices.PastoralCare.Model
                         newQualifier.Id = 0;
                         newQualifier.Guid = Guid.NewGuid();
                         newQualifier.IsSystem = false;
-                        newAttribute.AttributeQualifiers.Add( qualifier );
+                        newAttribute.AttributeQualifiers.Add( newQualifier );
                     }
                 }
 
                 // Save Attributes
                 string qualifierValue = newCareType.Id.ToString();
-                Rock.Attribute.Helper.SaveAttributeEdits( newAttributesState, new ConnectionOpportunity().TypeId, "CareTypeId", qualifierValue, rockContext );
+                Rock.Attribute.Helper.SaveAttributeEdits( newAttributesState, new CareTypeItem().TypeId, "CareTypeId", qualifierValue, rockContext );
 
                 // Copy Security
                 Rock.Security.Authorization.CopyAuthorization( careType, newCareType, rockContext );

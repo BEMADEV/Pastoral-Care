@@ -394,6 +394,41 @@ namespace com.bemaservices.PastoralCare.Blocks
             return ActionOk( this.GetParentPageUrl() );
         }
 
+        /// <summary>
+        /// Copies the specified care type and redirects to the new entity.
+        /// </summary>
+        /// <param name="key">The identifier of the entity to copy.</param>
+        /// <returns>The URL for the new care type.</returns>
+        [BlockAction]
+        public BlockActionResult Copy( string key )
+        {
+            var entityService = new CareTypeService( RockContext );
+            var entity = entityService.Get( key, !PageCache.Layout.Site.DisablePredictableIds );
+
+            if ( entity == null )
+            {
+                return ActionBadRequest( $"{CareType.FriendlyTypeName} not found." );
+            }
+
+            if ( !entity.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson ) )
+            {
+                return ActionBadRequest( $"Not authorized to copy {CareType.FriendlyTypeName}." );
+            }
+
+            var newEntityId = entityService.Copy( entity.Id );
+            var newEntity = entityService.Get( newEntityId );
+
+            if ( newEntity == null )
+            {
+                return ActionBadRequest( $"Unable to copy {CareType.FriendlyTypeName}." );
+            }
+
+            return ActionContent( System.Net.HttpStatusCode.Created, this.GetCurrentPageUrl( new Dictionary<string, string>
+            {
+                [PageParameterKey.CareTypeId] = newEntity.IdKey
+            } ) );
+        }
+
         #endregion
     }
 }

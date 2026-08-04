@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 using Rock.ViewModels.Utility;
 
@@ -9,9 +10,11 @@ namespace com.bemaservices.PastoralCare.ViewModels
     /// </summary>
     public class CareItemBag : EntityBagBase
     {
-        public DateTime ContactDateTime { get; set; }
+        public DateTime? ContactDateTime { get; set; }
 
         public ListItemBag ContactorPersonAlias { get; set; }
+
+        public List<string> CareTypeNames { get; set; }
 
         public string Description { get; set; }
 

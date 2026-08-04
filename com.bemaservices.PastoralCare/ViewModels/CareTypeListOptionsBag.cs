@@ -5,5 +5,8 @@ namespace com.bemaservices.PastoralCare.ViewModels
     /// </summary>
     public class CareTypeListOptionsBag
     {
+        public bool AllowSharedCareItemAttributes { get; set; }
+
+        public bool AllowSharedCareContactAttributes { get; set; }
     }
 }

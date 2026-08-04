@@ -8,6 +8,8 @@ export type CareItemBag = {
 
     attributeValues?: Record<string, string> | null;
 
+    careTypeNames?: string[] | null;
+
     contactDateTime?: string | null;
 
     contactorPersonAlias?: ListItemBag | null;
@@ -24,6 +26,7 @@ export type CareItemBag = {
 };
 
 export type CareItemDetailOptionsBag = {
+    defaultRequestTimeToCurrentTime?: boolean | null;
 };
 
 export type CareTypeBag = {
@@ -47,4 +50,7 @@ export type CareTypeItemListOptionsBag = {
 };
 
 export type CareTypeListOptionsBag = {
+    allowSharedCareContactAttributes?: boolean | null;
+
+    allowSharedCareItemAttributes?: boolean | null;
 };

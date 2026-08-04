@@ -114,6 +114,9 @@ namespace com.bemaservices.PastoralCare.Blocks
         protected override IQueryable<CareTypeItem> GetListQueryable( RockContext rockContext )
         {
             return base.GetListQueryable( rockContext )
+                .Include( a => a.CareItem.PersonAlias.Person )
+                .Include( a => a.CareItem.ContactorPersonAlias.Person )
+                .Include( "CareItem.CareContacts.ContactorPersonAlias.Person" )
                 .Include( a => a.CareItem )
                 .Include( a => a.CareType );
         }
@@ -124,7 +127,12 @@ namespace com.bemaservices.PastoralCare.Blocks
             return new GridBuilder<CareTypeItem>()
                 .WithBlock( this )
                 .AddTextField( "idKey", a => a.IdKey )
-                .AddTextField( "careItem", a => a.CareItem?.Name )
+                .AddTextField( "requestDate", a => a.CareItem != null ? a.CareItem.ContactDateTime.ToShortDateTimeString() : string.Empty )
+                .AddTextField( "name", a => a.CareItem?.PersonAlias?.Person?.FullNameReversed )
+                .AddTextField( "requester", a => a.CareItem?.ContactorPersonAlias?.Person?.FullNameReversed )
+                .AddTextField( "lastContactDate", a => a.CareItem?.CareContacts.OrderByDescending( c => c.ContactDateTime ).Select( c => c.ContactDateTime.ToShortDateTimeString() ).FirstOrDefault() )
+                .AddTextField( "lastContactor", a => a.CareItem?.CareContacts.OrderByDescending( c => c.ContactDateTime ).Select( c => c.ContactorPersonAlias != null && c.ContactorPersonAlias.Person != null ? c.ContactorPersonAlias.Person.FullNameReversed : string.Empty ).FirstOrDefault() )
+                .AddTextField( "lastContact", a => a.CareItem?.CareContacts.OrderByDescending( c => c.ContactDateTime ).Select( c => c.Description ).FirstOrDefault() )
                 .AddTextField( "careType", a => a.CareType?.Name )
                 .AddAttributeFields( GetGridAttributes() );
         }

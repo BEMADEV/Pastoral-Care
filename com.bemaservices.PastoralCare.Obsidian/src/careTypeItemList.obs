@@ -2,7 +2,7 @@
     <Grid :definition="config.gridDefinition ?? undefined"
           :data="gridDataSource"
           keyField="idKey"
-          itemTerm="Care Type Item"
+          itemTerm="Care Item"
           entityTypeGuid="72352815-30f3-46fb-86c0-69ac284d9ed2"
           stickyHeader
           liveUpdates
@@ -10,11 +10,41 @@
           @selectItem="onSelectItem">
         <SelectColumn />
 
-        <TextColumn name="careItem"
-                    title="Care Item"
-                    field="careItem"
+        <TextColumn name="requestDate"
+                    title="Request Date"
+                    field="requestDate"
                     :filter="textValueFilter"
                     visiblePriority="xs" />
+
+        <TextColumn name="name"
+                    title="Name"
+                    field="name"
+                    :filter="textValueFilter"
+                    visiblePriority="xs" />
+
+        <TextColumn name="requester"
+                    title="Requester"
+                    field="requester"
+                    :filter="textValueFilter"
+                    visiblePriority="sm" />
+
+        <TextColumn name="lastContactDate"
+                    title="Last Contact Date"
+                    field="lastContactDate"
+                    :filter="textValueFilter"
+                    visiblePriority="md" />
+
+        <TextColumn name="lastContactor"
+                    title="Last Contactor"
+                    field="lastContactor"
+                    :filter="textValueFilter"
+                    visiblePriority="md" />
+
+        <TextColumn name="lastContact"
+                    title="Last Contact"
+                    field="lastContact"
+                    :filter="textValueFilter"
+                    visiblePriority="lg" />
 
         <TextColumn name="careType"
                     title="Care Type"
@@ -29,7 +59,6 @@
 <script setup lang="ts">
 import { onConfigurationValuesChanged, useConfigurationValues, useInvokeBlockAction, useReloadBlock } from "@Obsidian/Utility/block";
 import Grid, { AttributeColumns, TextColumn, textValueFilter, SelectColumn } from "@Obsidian/Controls/grid";
-import { alert } from "@Obsidian/Utility/dialogs";
 import { ListBlockBox } from "@Obsidian/ViewModels/Blocks/listBlockBox";
 import { CareTypeItemListOptionsBag } from "./viewModels";
 import { GridDataBag } from "@Obsidian/ViewModels/Core/Grid/gridDataBag";

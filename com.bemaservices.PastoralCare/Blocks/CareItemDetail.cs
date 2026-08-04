@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.Entity;
 using System.Linq;
 
 using Rock;
@@ -31,6 +32,11 @@ namespace com.bemaservices.PastoralCare.Blocks
 
     #region Block Attributes
 
+    [BooleanField( "Default Request Time to Current Time",
+        Description = "Defaults the request date and time to the current date and time.",
+        DefaultBooleanValue = false,
+        Key = AttributeKey.DefaultRequestTimeToCurrentTime )]
+
     #endregion
 
     [Rock.SystemGuid.EntityTypeGuid( "c883850c-d9d8-4fa9-a337-0b2ba639a3c3" )]
@@ -42,6 +48,12 @@ namespace com.bemaservices.PastoralCare.Blocks
         private static class PageParameterKey
         {
             public const string CareItemId = "CareItemId";
+            public const string CareTypeId = "CareTypeId";
+        }
+
+        private static class AttributeKey
+        {
+            public const string DefaultRequestTimeToCurrentTime = "DefaultRequestTimeToCurrentTime";
         }
 
         private static class NavigationUrlKey
@@ -81,7 +93,10 @@ namespace com.bemaservices.PastoralCare.Blocks
         /// <returns>The options that provide additional details to the block.</returns>
         private CareItemDetailOptionsBag GetBoxOptions( bool isEditable )
         {
-            var options = new CareItemDetailOptionsBag();
+            var options = new CareItemDetailOptionsBag
+            {
+                DefaultRequestTimeToCurrentTime = GetAttributeValue( AttributeKey.DefaultRequestTimeToCurrentTime ).AsBoolean()
+            };
 
             return options;
         }
@@ -95,6 +110,30 @@ namespace com.bemaservices.PastoralCare.Blocks
         /// <returns><c>true</c> if the CareItem is valid, <c>false</c> otherwise.</returns>
         private bool ValidateCareItem( CareItem careItem, out string errorMessage )
         {
+            if ( !careItem.PersonAliasId.HasValue )
+            {
+                errorMessage = "A person is required.";
+                return false;
+            }
+
+            if ( !careItem.ContactorPersonAliasId.HasValue )
+            {
+                errorMessage = "A requester is required.";
+                return false;
+            }
+
+            if ( careItem.ContactDateTime <= DateTime.MinValue.AddYears( 1 ) )
+            {
+                errorMessage = "A valid request date is required.";
+                return false;
+            }
+
+            if ( !careItem.CareTypeItems.Any() )
+            {
+                errorMessage = "At least one care type is required.";
+                return false;
+            }
+
             errorMessage = null;
 
             return true;
@@ -161,7 +200,8 @@ namespace com.bemaservices.PastoralCare.Blocks
             return new CareItemBag
             {
                 IdKey = entity.IdKey,
-                ContactDateTime = entity.ContactDateTime,
+                CareTypeNames = entity.CareTypeItems.Select( cti => cti.CareType != null ? cti.CareType.Name : string.Empty ).Where( n => n.IsNotNullOrWhiteSpace() ).ToList(),
+                ContactDateTime = entity.ContactDateTime > DateTime.MinValue.AddYears( 1 ) ? entity.ContactDateTime : ( DateTime? ) null,
                 ContactorPersonAlias = entity.ContactorPersonAlias.ToListItemBag(),
                 Description = entity.Description,
                 IsActive = entity.IsActive,
@@ -219,7 +259,7 @@ namespace com.bemaservices.PastoralCare.Blocks
             }
 
             box.IfValidProperty( nameof( box.Bag.ContactDateTime ),
-                () => entity.ContactDateTime = box.Bag.ContactDateTime );
+                () => entity.ContactDateTime = box.Bag.ContactDateTime ?? RockDateTime.Now );
 
             box.IfValidProperty( nameof( box.Bag.ContactorPersonAlias ),
                 () => entity.ContactorPersonAliasId = box.Bag.ContactorPersonAlias.GetEntityId<PersonAlias>( RockContext ) );
@@ -247,7 +287,14 @@ namespace com.bemaservices.PastoralCare.Blocks
         /// <inheritdoc/>
         protected override CareItem GetInitialEntity()
         {
-            return GetInitialEntity<CareItem, CareItemService>( RockContext, PageParameterKey.CareItemId );
+            var entity = GetInitialEntity<CareItem, CareItemService>( RockContext, PageParameterKey.CareItemId );
+
+            if ( entity != null )
+            {
+                LoadEntityIncludes( entity );
+            }
+
+            return entity;
         }
 
         /// <summary>
@@ -287,6 +334,8 @@ namespace com.bemaservices.PastoralCare.Blocks
                 error = ActionBadRequest( $"{CareItem.FriendlyTypeName} not found." );
                 return false;
             }
+
+            LoadEntityIncludes( entity );
 
             if ( !entity.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson ) )
             {
@@ -348,6 +397,7 @@ namespace com.bemaservices.PastoralCare.Blocks
             }
 
             // Ensure everything is valid before saving.
+            EnsureCareTypeAssociation( entity );
             if ( !ValidateCareItem( entity, out var validationMessage ) )
             {
                 return ActionBadRequest( validationMessage );
@@ -371,6 +421,7 @@ namespace com.bemaservices.PastoralCare.Blocks
 
             // Ensure navigation properties will work now.
             entity = entityService.Get( entity.Id );
+            LoadEntityIncludes( entity );
             entity.LoadAttributes( RockContext );
 
             var bag = GetEntityBagForEdit( entity );
@@ -401,6 +452,46 @@ namespace com.bemaservices.PastoralCare.Blocks
             RockContext.SaveChanges();
 
             return ActionOk( this.GetParentPageUrl() );
+        }
+
+        /// <summary>
+        /// Adds the selected care type association to new entities when one was provided on the page.
+        /// </summary>
+        /// <param name="entity">The entity being saved.</param>
+        private void EnsureCareTypeAssociation( CareItem entity )
+        {
+            if ( entity.CareTypeItems.Any() )
+            {
+                return;
+            }
+
+            var careTypeId = RequestContext.GetPageParameter( PageParameterKey.CareTypeId ).AsIntegerOrNull();
+
+            if ( careTypeId.HasValue && careTypeId.Value > 0 )
+            {
+                entity.CareTypeItems.Add( new CareTypeItem
+                {
+                    CareTypeId = careTypeId.Value
+                } );
+            }
+        }
+
+        /// <summary>
+        /// Loads related entities required by the Obsidian view/edit bags.
+        /// </summary>
+        /// <param name="entity">The care item entity.</param>
+        private void LoadEntityIncludes( CareItem entity )
+        {
+            if ( entity == null || entity.Id == 0 )
+            {
+                return;
+            }
+
+            RockContext.Entry( entity )
+                .Collection( c => c.CareTypeItems )
+                .Query()
+                .Include( cti => cti.CareType )
+                .Load();
         }
 
         #endregion

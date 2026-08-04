@@ -5,5 +5,6 @@ namespace com.bemaservices.PastoralCare.ViewModels
     /// </summary>
     public class CareItemDetailOptionsBag
     {
+        public bool DefaultRequestTimeToCurrentTime { get; set; }
     }
 }

@@ -58,6 +58,10 @@ const topValues = computed((): ValueDetailListItem[] => {
         valueBuilder.addTextValue("Description", props.modelValue.description);
     }
 
+    if (props.modelValue.careTypeNames?.length) {
+        valueBuilder.addTextValue("Care Types", props.modelValue.careTypeNames.join(", "));
+    }
+
     return valueBuilder.build();
 });
 
@@ -69,6 +73,14 @@ const leftSideValues = computed((): ValueDetailListItem[] => {
         return valueBuilder.build();
     }
 
+    if (props.modelValue.personAlias?.text) {
+        valueBuilder.addTextValue("Person", props.modelValue.personAlias.text);
+    }
+
+    if (props.modelValue.contactorPersonAlias?.text) {
+        valueBuilder.addTextValue("Requester", props.modelValue.contactorPersonAlias.text);
+    }
+
     return valueBuilder.build();
 });
 
@@ -78,6 +90,11 @@ const rightSideValues = computed((): ValueDetailListItem[] => {
 
     if (!props.modelValue) {
         return valueBuilder.build();
+    }
+
+    if (props.modelValue.contactDateTime) {
+        const date = new Date(props.modelValue.contactDateTime);
+        valueBuilder.addTextValue("Request Date", Number.isNaN(date.getTime()) ? props.modelValue.contactDateTime : date.toLocaleString());
     }
 
     return valueBuilder.build();

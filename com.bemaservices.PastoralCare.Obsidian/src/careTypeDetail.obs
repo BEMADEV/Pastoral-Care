@@ -3,6 +3,10 @@
 
     <NotificationBox v-if="errorMessage" alertType="danger" v-html="errorMessage"></NotificationBox>
 
+    <div v-if="!blockError && panelMode === DetailPanelMode.View && isEditable" class="text-right margin-b-sm">
+        <button type="button" class="btn btn-default" @click="onCopy">Copy</button>
+    </div>
+
     <DetailBlock v-if="!blockError"
                  v-model:mode="panelMode"
                  :name="panelName"
@@ -168,6 +172,24 @@ async function onDelete(): Promise<false | string> {
 
         return false;
     }
+}
+
+/**
+ * Event handler for the Copy button being clicked.
+ */
+async function onCopy(): Promise<void> {
+    errorMessage.value = "";
+
+    const result = await invokeBlockAction<string>("Copy", {
+        key: careTypeViewBag.value?.idKey
+    });
+
+    if (result.isSuccess && result.data && result.statusCode === 201) {
+        window.location.href = result.data;
+        return;
+    }
+
+    errorMessage.value = result.errorMessage ?? "Unknown error while trying to copy care type.";
 }
 
 /**

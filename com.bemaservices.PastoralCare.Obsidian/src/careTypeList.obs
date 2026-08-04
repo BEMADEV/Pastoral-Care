@@ -10,6 +10,24 @@
           liveUpdates
           :onAddItem="config.isAddEnabled ? onAddItem : undefined"
           @selectItem="onSelectItem">
+        <template #gridActions>
+            <div class="btn-group pull-left"
+                 v-if="config.options?.allowSharedCareItemAttributes || config.options?.allowSharedCareContactAttributes">
+                <button v-if="config.options?.allowSharedCareItemAttributes"
+                        class="btn btn-default btn-sm"
+                        type="button"
+                        @click="onSharedCareItemAttributesClick">
+                    Shared Care Item Attributes
+                </button>
+                <button v-if="config.options?.allowSharedCareContactAttributes"
+                        class="btn btn-default btn-sm"
+                        type="button"
+                        @click="onSharedCareContactAttributesClick">
+                    Shared Care Contact Attributes
+                </button>
+            </div>
+        </template>
+
         <SelectColumn />
 
         <TextColumn name="description"
@@ -31,7 +49,6 @@
 <script setup lang="ts">
 import { onConfigurationValuesChanged, useConfigurationValues, useInvokeBlockAction, useReloadBlock } from "@Obsidian/Utility/block";
 import Grid, { AttributeColumns, TextColumn, textValueFilter, SelectColumn } from "@Obsidian/Controls/grid";
-import { alert } from "@Obsidian/Utility/dialogs";
 import { ListBlockBox } from "@Obsidian/ViewModels/Blocks/listBlockBox";
 import { CareTypeListOptionsBag } from "./viewModels";
 import { GridDataBag } from "@Obsidian/ViewModels/Core/Grid/gridDataBag";
@@ -91,6 +108,22 @@ function onSelectItem(key: string): void {
 function onAddItem(): void {
     if (config.navigationUrls?.[NavigationUrlKey.DetailPage]) {
         window.location.href = config.navigationUrls[NavigationUrlKey.DetailPage].replace("((Key))", "0");
+    }
+}
+
+function onSharedCareItemAttributesClick(): void {
+    const url = config.navigationUrls?.[NavigationUrlKey.SharedCareItemAttributePage];
+
+    if (url) {
+        window.location.href = url;
+    }
+}
+
+function onSharedCareContactAttributesClick(): void {
+    const url = config.navigationUrls?.[NavigationUrlKey.SharedCareContactAttributePage];
+
+    if (url) {
+        window.location.href = url;
     }
 }
 
