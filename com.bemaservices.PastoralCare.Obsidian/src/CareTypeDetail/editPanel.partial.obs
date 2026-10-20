@@ -17,19 +17,79 @@
                  label="Description"
                  textMode="multiline" />
 
+        <Panel v-if="canManageCareItemAttributes" title="Care Item Attributes" hasCollapse>
+            <Grid :data="careItemAttributesGridData"
+                  keyField="key"
+                  itemTerm="Care Item Attribute"
+                  liveUpdates
+                  light
+                  @addItem="onAddAttribute">
+                <ReorderColumn :onOrderChanged="onOrderChanged" />
+
+                <TextColumn name="name"
+                            field="name"
+                            title="Attribute" />
+
+                <TextColumn name="description"
+                            field="description"
+                            title="Description" />
+
+                <TextColumn name="fieldType"
+                            field="fieldType"
+                            title="Field Type" />
+
+                <BooleanColumn name="isRequired"
+                               field="isRequired"
+                               title="Required" />
+
+                <BooleanColumn name="showInGrid"
+                               field="showInGrid"
+                               title="Show in Grid" />
+
+                <BooleanColumn name="allowSearch"
+                               field="allowSearch"
+                               title="Allow Search" />
+
+                <EditColumn @click="onEditAttribute" />
+
+                <DeleteColumn @click="onDeleteAttribute" disableConfirmation />
+            </Grid>
+        </Panel>
+
         <AttributeValuesContainer v-model="attributeValues" :attributes="attributes" isEditMode :numberOfColumns="2" />
+
+        <Modal v-model="isAttributeModalOpen"
+               title="Care Item Attribute"
+               saveText="Save"
+               :onSave="onStartSaveAttribute">
+            <hr />
+            <RockForm v-model:submit="submitEditAttribute" @submit="onSaveAttribute">
+                <AttributeEditor v-model="eventAttribute"
+                                 :reservedKeyNames="reservedKeyNames"
+                                 attributeEntityTypeGuid="72352815-30F3-46FB-86C0-69AC284D9ED2" />
+            </RockForm>
+        </Modal>
     </fieldset>
 </template>
 
 <script setup lang="ts">
-import { PropType, ref, watch } from "vue";
+import { computed, PropType, reactive, ref, watch } from "vue";
+import AttributeEditor from "@Obsidian/Controls/attributeEditor.obs";
 import AttributeValuesContainer from "@Obsidian/Controls/attributeValuesContainer.obs";
 import CheckBox from "@Obsidian/Controls/checkBox.obs";
+import Grid, { BooleanColumn, DeleteColumn, EditColumn, ReorderColumn, TextColumn } from "@Obsidian/Controls/grid";
+import Modal from "@Obsidian/Controls/modal.obs";
+import Panel from "@Obsidian/Controls/panel.obs";
+import RockForm from "@Obsidian/Controls/rockForm.obs";
 import TextBox from "@Obsidian/Controls/textBox.obs";
 import { setPropertiesBoxValue, watchPropertyChanges } from "@Obsidian/Utility/block";
 import { propertyRef, updateRefValue } from "@Obsidian/Utility/component";
-import { CareTypeBag, CareTypeDetailOptionsBag } from "../viewModels";
+import { newGuid } from "@Obsidian/Utility/guid";
+import { FieldType as FieldTypeGuids } from "@Obsidian/SystemGuids/fieldType";
+import { CareItemAttributeBag, CareTypeBag, CareTypeDetailOptionsBag } from "../viewModels";
+import { GridDataBag } from "@Obsidian/ViewModels/Core/Grid/gridDataBag";
 import { ValidPropertiesBox } from "@Obsidian/ViewModels/Utility/validPropertiesBox";
+import { PublicEditableAttributeBag } from "@Obsidian/ViewModels/Utility/publicEditableAttributeBag";
 
 const props = defineProps({
     modelValue: {
@@ -52,13 +112,22 @@ const emit = defineEmits<{
 
 const attributes = ref(props.modelValue.bag?.attributes ?? {});
 const attributeValues = ref(props.modelValue.bag?.attributeValues ?? {});
+const careItemAttributes = ref<CareItemAttributeBag[]>(props.modelValue.bag?.careItemAttributes ?? []);
 const description = propertyRef(props.modelValue.bag?.description ?? "", "Description");
 const isActive = propertyRef(props.modelValue.bag?.isActive ?? false, "IsActive");
 const name = propertyRef(props.modelValue.bag?.name ?? "", "Name");
+const isAttributeModalOpen = ref(false);
+const submitEditAttribute = ref(false);
+const eventAttribute = ref<PublicEditableAttributeBag | null>(null);
+const reservedKeyNames = ref<string[]>([]);
 
 // The properties that are being edited. This should only contain
 // objects returned by propertyRef().
 const propRefs = [description, isActive, name];
+const canManageCareItemAttributes = computed(() => props.modelValue.bag?.canManageCareItemAttributes === true);
+const careItemAttributesGridData: GridDataBag = reactive<GridDataBag>({
+    rows: careItemAttributes.value.map(toAttributeGridRowItem)
+});
 
 // #endregion
 
@@ -68,9 +137,134 @@ const propRefs = [description, isActive, name];
 
 // #region Functions
 
+function toAttributeGridRowItem(bag: CareItemAttributeBag): Record<string, unknown> {
+    const attribute = bag.attribute;
+
+    if (attribute?.key && !reservedKeyNames.value.includes(attribute.key)) {
+        reservedKeyNames.value.push(attribute.key);
+    }
+
+    return {
+        key: attribute?.guid,
+        name: attribute?.name,
+        description: attribute?.description,
+        fieldType: bag.fieldType,
+        isRequired: attribute?.isRequired,
+        showInGrid: attribute?.isShowInGrid,
+        allowSearch: attribute?.isAllowSearch
+    };
+}
+
 // #endregion
 
 // #region Event Handlers
+
+function onAddAttribute(): void {
+    eventAttribute.value = {} as PublicEditableAttributeBag;
+    eventAttribute.value.fieldTypeGuid = FieldTypeGuids.Text;
+    isAttributeModalOpen.value = true;
+}
+
+function onEditAttribute(key: string): void {
+    const selectedAttribute = careItemAttributes.value.find(item => item.attribute?.guid === key);
+
+    if (selectedAttribute?.attribute) {
+        eventAttribute.value = selectedAttribute.attribute;
+        isAttributeModalOpen.value = true;
+        reservedKeyNames.value = reservedKeyNames.value.filter(keyName => keyName !== selectedAttribute.attribute?.key);
+    }
+    else {
+        onAddAttribute();
+    }
+}
+
+function onSaveAttribute(): void {
+    if (eventAttribute.value && careItemAttributes.value) {
+        const index = careItemAttributes.value.findIndex(item => item.attribute?.guid === eventAttribute.value?.guid);
+
+        if (index !== -1) {
+            const editedAttribute = { ...careItemAttributes.value[index], attribute: eventAttribute.value };
+            const rowItem = careItemAttributesGridData.rows?.find(row => row.key === eventAttribute.value?.guid);
+            const updatedAttributes = [...careItemAttributes.value];
+            updatedAttributes[index] = editedAttribute;
+            careItemAttributes.value = updatedAttributes;
+
+            if (rowItem && careItemAttributesGridData.rows) {
+                const rowIndex = careItemAttributesGridData.rows.findIndex(row => row.key === eventAttribute.value?.guid);
+                careItemAttributesGridData.rows.splice(rowIndex, 1, toAttributeGridRowItem(editedAttribute));
+            }
+        }
+        else {
+            eventAttribute.value.guid = newGuid();
+            const newAttribute: CareItemAttributeBag = {
+                attribute: eventAttribute.value,
+                fieldType: ""
+            };
+
+            careItemAttributes.value = [...careItemAttributes.value, newAttribute];
+            careItemAttributesGridData.rows?.push(toAttributeGridRowItem(newAttribute));
+        }
+
+        eventAttribute.value = null;
+        isAttributeModalOpen.value = false;
+    }
+}
+
+function onStartSaveAttribute(): void {
+    submitEditAttribute.value = true;
+}
+
+function onDeleteAttribute(key: string): void {
+    const deletedAttribute = careItemAttributes.value.find(item => item.attribute?.guid === key);
+    careItemAttributes.value = careItemAttributes.value.filter(item => item.attribute?.guid !== key);
+
+    if (deletedAttribute?.attribute?.key) {
+        reservedKeyNames.value = reservedKeyNames.value.filter(keyName => keyName !== deletedAttribute.attribute?.key);
+    }
+
+    if (careItemAttributesGridData.rows) {
+        const index = careItemAttributesGridData.rows.findIndex(row => row.key === key);
+
+        if (index !== -1) {
+            careItemAttributesGridData.rows.splice(index, 1);
+        }
+    }
+}
+
+function onOrderChanged(item: Record<string, unknown>, beforeItem: Record<string, unknown> | null): boolean {
+    const itemGuid = item["key"] as string;
+    const beforeGuid = (beforeItem?.["key"] as string | undefined) ?? null;
+    const currentItems = [...careItemAttributes.value];
+    const index = currentItems.findIndex(attribute => attribute.attribute?.guid === itemGuid);
+
+    if (index < 0) {
+        return false;
+    }
+
+    const itemToMove = currentItems.splice(index, 1)[0];
+
+    if (beforeGuid) {
+        const beforeIndex = currentItems.findIndex(attribute => attribute.attribute?.guid === beforeGuid);
+
+        if (beforeIndex < 0) {
+            currentItems.push(itemToMove);
+        }
+        else {
+            currentItems.splice(beforeIndex, 0, itemToMove);
+        }
+    }
+    else {
+        currentItems.push(itemToMove);
+    }
+
+    careItemAttributes.value = currentItems;
+
+    if (careItemAttributesGridData.rows) {
+        careItemAttributesGridData.rows = careItemAttributes.value.map(toAttributeGridRowItem);
+    }
+
+    return true;
+}
 
 // #endregion
 
@@ -78,19 +272,34 @@ const propRefs = [description, isActive, name];
 watch(() => props.modelValue, () => {
     updateRefValue(attributes, props.modelValue.bag?.attributes ?? {});
     updateRefValue(attributeValues, props.modelValue.bag?.attributeValues ?? {});
+    updateRefValue(careItemAttributes, props.modelValue.bag?.careItemAttributes ?? []);
     updateRefValue(description, props.modelValue.bag?.description ?? "");
     updateRefValue(isActive, props.modelValue.bag?.isActive ?? false);
     updateRefValue(name, props.modelValue.bag?.name ?? "");
+
+    if (careItemAttributesGridData.rows) {
+        careItemAttributesGridData.rows = careItemAttributes.value.map(toAttributeGridRowItem);
+    }
+});
+
+watch(isAttributeModalOpen, () => {
+    if (isAttributeModalOpen.value) {
+        reservedKeyNames.value = reservedKeyNames.value.filter(keyName => keyName !== eventAttribute.value?.key);
+    }
+    else {
+        reservedKeyNames.value = careItemAttributes.value.map(item => item.attribute?.key).filter((key): key is string => !!key);
+    }
 });
 
 // Determines which values we want to track changes on (defined in the
 // array) and then emit a new object defined as newValue.
-watch([attributeValues, ...propRefs], () => {
+watch([attributeValues, careItemAttributes, ...propRefs], () => {
     const newValue: ValidPropertiesBox<CareTypeBag> = {
         bag: { ...props.modelValue.bag } as CareTypeBag
     };
 
     setPropertiesBoxValue(newValue, "attributeValues", attributeValues.value);
+    setPropertiesBoxValue(newValue, "careItemAttributes", careItemAttributes.value);
     setPropertiesBoxValue(newValue, "description", description.value);
     setPropertiesBoxValue(newValue, "isActive", isActive.value);
     setPropertiesBoxValue(newValue, "name", name.value);

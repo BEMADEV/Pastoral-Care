@@ -204,7 +204,36 @@ namespace com.bemaservices.PastoralCare.Blocks
 
             bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson, enforceSecurity: true );
 
+            if ( entity.IsAuthorized( Authorization.ADMINISTRATE, RequestContext.CurrentPerson ) )
+            {
+                bag.CanManageCareItemAttributes = true;
+                bag.CareItemAttributes = GetCareItemAttributes( entity.Id ).ConvertAll( attribute => new CareItemAttributeBag
+                {
+                    Attribute = PublicAttributeHelper.GetPublicEditableAttribute( attribute ),
+                    FieldType = FieldTypeCache.Get( attribute.FieldTypeId )?.Name
+                } );
+            }
+
             return bag;
+        }
+
+        /// <summary>
+        /// Gets the CareItem attribute definitions scoped to the specified CareType.
+        /// </summary>
+        private List<Rock.Model.Attribute> GetCareItemAttributes( int careTypeId )
+        {
+            if ( careTypeId == 0 )
+            {
+                return new List<Rock.Model.Attribute>();
+            }
+
+            var entityTypeId = new CareTypeItem().TypeId;
+
+            return new AttributeService( RockContext ).GetByEntityTypeId( entityTypeId, true ).AsQueryable()
+                .Where( a => a.EntityTypeQualifierColumn.Equals( "CareTypeId", StringComparison.OrdinalIgnoreCase ) && a.EntityTypeQualifierValue.Equals( careTypeId.ToString() ) )
+                .OrderBy( a => a.Order )
+                .ThenBy( a => a.Name )
+                .ToList();
         }
 
         /// <inheritdoc/>
@@ -332,6 +361,37 @@ namespace com.bemaservices.PastoralCare.Blocks
                 return actionError;
             }
 
+            var shouldSaveCareItemAttributes = box.ValidProperties != null
+                && box.ValidProperties.Contains( nameof( box.Bag.CareItemAttributes ) )
+                && box.Bag.CareItemAttributes != null;
+
+            List<PublicEditableAttributeBag> careItemAttributes = null;
+
+            if ( shouldSaveCareItemAttributes )
+            {
+                if ( !entity.IsAuthorized( Authorization.ADMINISTRATE, RequestContext.CurrentPerson ) )
+                {
+                    return ActionBadRequest( "Not authorized to manage Care Item attributes for this Care Type." );
+                }
+
+                if ( box.Bag.CareItemAttributes.Any( a => a?.Attribute == null ) )
+                {
+                    return ActionBadRequest( "Invalid Care Item attribute." );
+                }
+
+                careItemAttributes = box.Bag.CareItemAttributes.ConvertAll( a => a.Attribute );
+
+                if ( !AreCareItemAttributeEditsAllowed( careItemAttributes, entity.Id ) )
+                {
+                    return ActionBadRequest( "Invalid attribute." );
+                }
+
+                if ( careItemAttributes.GroupBy( a => a.Key, StringComparer.OrdinalIgnoreCase ).Any( group => group.Count() > 1 ) )
+                {
+                    return ActionBadRequest( "Care Item attribute keys must be unique." );
+                }
+            }
+
             // Update the entity instance from the information in the bag.
             if ( !UpdateEntityFromBox( entity, box ) )
             {
@@ -349,6 +409,12 @@ namespace com.bemaservices.PastoralCare.Blocks
             RockContext.WrapTransaction( () =>
             {
                 RockContext.SaveChanges();
+
+                if ( shouldSaveCareItemAttributes )
+                {
+                    SaveCareItemAttributes( entity.Id, careItemAttributes );
+                }
+
                 entity.SaveAttributeValues( RockContext );
             } );
 
@@ -371,6 +437,75 @@ namespace com.bemaservices.PastoralCare.Blocks
                 Bag = bag,
                 ValidProperties = bag.GetType().GetProperties().Select( p => p.Name ).ToList()
             } );
+        }
+
+        /// <summary>
+        /// Saves the staged CareItem attribute definitions for a CareType.
+        /// </summary>
+        private void SaveCareItemAttributes( int careTypeId, List<PublicEditableAttributeBag> careItemAttributes )
+        {
+            var entityTypeId = new CareTypeItem().TypeId;
+            var attributeService = new AttributeService( RockContext );
+            var existingAttributes = attributeService.GetByEntityTypeQualifier( entityTypeId, "CareTypeId", careTypeId.ToString(), true ).ToList();
+            var retainedAttributeGuids = new HashSet<Guid>( careItemAttributes.Where( a => a.Guid.HasValue ).Select( a => a.Guid.Value ) );
+            var order = 0;
+
+            foreach ( var attribute in existingAttributes.Where( a => !retainedAttributeGuids.Contains( a.Guid ) ) )
+            {
+                attributeService.Delete( attribute );
+            }
+
+            RockContext.SaveChanges();
+
+            foreach ( var attributeBag in careItemAttributes )
+            {
+                var attribute = Rock.Attribute.Helper.SaveAttributeEdits( attributeBag, entityTypeId, "CareTypeId", careTypeId.ToString(), RockContext );
+
+                if ( attribute != null )
+                {
+                    attribute.Order = order++;
+                }
+            }
+
+            RockContext.SaveChanges();
+        }
+
+        /// <summary>
+        /// Ensures posted attribute identifiers are new or already belong to this CareType's CareItem attributes.
+        /// </summary>
+        private bool AreCareItemAttributeEditsAllowed( List<PublicEditableAttributeBag> careItemAttributes, int careTypeId )
+        {
+            var attributeGuids = careItemAttributes
+                .Where( a => a.Guid.HasValue )
+                .Select( a => a.Guid.Value )
+                .ToList();
+
+            if ( attributeGuids.Count != attributeGuids.Distinct().Count() )
+            {
+                return false;
+            }
+
+            if ( !attributeGuids.Any() )
+            {
+                return true;
+            }
+
+            var entityTypeId = new CareTypeItem().TypeId;
+            var qualifierValue = careTypeId == 0 ? null : careTypeId.ToString();
+            var existingAttributes = new AttributeService( RockContext ).Queryable()
+                .Where( a => attributeGuids.Contains( a.Guid ) )
+                .Select( a => new
+                {
+                    a.EntityTypeId,
+                    a.EntityTypeQualifierColumn,
+                    a.EntityTypeQualifierValue
+                } )
+                .ToList();
+
+            return existingAttributes.All( a =>
+                a.EntityTypeId == entityTypeId
+                && string.Equals( a.EntityTypeQualifierColumn, "CareTypeId", StringComparison.OrdinalIgnoreCase )
+                && a.EntityTypeQualifierValue == qualifierValue );
         }
 
         /// <summary>

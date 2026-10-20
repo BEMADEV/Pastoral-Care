@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 using Rock.ViewModels.Utility;
 
 namespace com.bemaservices.PastoralCare.ViewModels
@@ -12,5 +14,16 @@ namespace com.bemaservices.PastoralCare.ViewModels
         public bool IsActive { get; set; }
 
         public string Name { get; set; }
+
+        public bool CanManageCareItemAttributes { get; set; }
+
+        public List<CareItemAttributeBag> CareItemAttributes { get; set; }
+    }
+
+    public class CareItemAttributeBag
+    {
+        public PublicEditableAttributeBag Attribute { get; set; }
+
+        public string FieldType { get; set; }
     }
 }

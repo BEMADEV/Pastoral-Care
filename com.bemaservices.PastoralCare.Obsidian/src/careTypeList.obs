@@ -1,59 +1,75 @@
 <template>
-    <Grid :definition="config.gridDefinition ?? undefined"
-          :data="gridDataSource"
-          keyField="idKey"
-          itemTerm="Care Type"
-          entityTypeGuid="ce1dfe04-9bc1-423b-a63c-983ac28140b5"
-          :expectedRowCount="config.expectedRowCount ?? undefined"
-          tooltipField="name"
-          stickyHeader
-          liveUpdates
-          :onAddItem="config.isAddEnabled ? onAddItem : undefined"
-          @selectItem="onSelectItem">
-        <template #gridActions>
-            <div class="btn-group pull-left"
-                 v-if="config.options?.allowSharedCareItemAttributes || config.options?.allowSharedCareContactAttributes">
-                <button v-if="config.options?.allowSharedCareItemAttributes"
-                        class="btn btn-default btn-sm"
-                        type="button"
-                        @click="onSharedCareItemAttributesClick">
-                    Shared Care Item Attributes
-                </button>
-                <button v-if="config.options?.allowSharedCareContactAttributes"
-                        class="btn btn-default btn-sm"
-                        type="button"
-                        @click="onSharedCareContactAttributesClick">
-                    Shared Care Contact Attributes
-                </button>
+    <Panel type="block"
+           title="Care Types"
+           titleIconCssClass="ti ti-heart"
+           class="list-as-blocks">
+        <template #headerActions>
+            <div class="d-flex gap-x-1">
+                <RockButton v-if="config.isAddEnabled"
+                            :btnType="BtnType.Default"
+                            :btnSize="BtnSize.ExtraSmall"
+                            isSquare
+                            title="Add Care Type"
+                            aria-label="Add Care Type"
+                            @click="onAddItem">
+                    <i class="ti ti-plus"></i>
+                </RockButton>
             </div>
         </template>
 
-        <SelectColumn />
+        <ul v-if="careTypes.length > 0 || config.options?.allowSharedCareItemAttributes || config.options?.allowSharedCareContactAttributes">
+            <li v-for="(careType, index) in careTypes" :key="careType.idKey ?? index">
+                <a href="#" @click.prevent="onSelectItem(careType.idKey ?? '')">
+                    <i class="ti ti-heart"></i>
+                    <h3>{{ careType.name }}</h3>
+                    <p v-if="careType.description" class="text-muted">{{ careType.description }}</p>
+                </a>
+            </li>
+            <li v-if="config.options?.allowSharedCareItemAttributes">
+                <a href="#" @click.prevent="onSharedCareItemAttributesClick">
+                    <i class="ti ti-settings"></i>
+                    <h3>Shared Care Item Attributes</h3>
+                </a>
+            </li>
+            <li v-if="config.options?.allowSharedCareContactAttributes">
+                <a href="#" @click.prevent="onSharedCareContactAttributesClick">
+                    <i class="ti ti-settings"></i>
+                    <h3>Shared Care Contact Attributes</h3>
+                </a>
+            </li>
+        </ul>
 
-        <TextColumn name="description"
-                    title="Description"
-                    field="description"
-                    :filter="textValueFilter"
-                    visiblePriority="xs" />
-
-        <TextColumn name="name"
-                    title="Name"
-                    field="name"
-                    :filter="textValueFilter"
-                    visiblePriority="xs" />
-
-        <AttributeColumns :attributes="config.gridDefinition?.attributeFields ?? []" />
-    </Grid>
+        <NotificationBox v-else-if="isLoading" :alertType="AlertType.Info">
+            Loading care types...
+        </NotificationBox>
+        <NotificationBox v-else-if="errorMessage" :alertType="AlertType.Danger">
+            {{ errorMessage }}
+        </NotificationBox>
+        <NotificationBox v-else :alertType="AlertType.Info">
+            There are no care types to display.
+        </NotificationBox>
+    </Panel>
 </template>
 
 <script setup lang="ts">
 import { onConfigurationValuesChanged, useConfigurationValues, useInvokeBlockAction, useReloadBlock } from "@Obsidian/Utility/block";
-import Grid, { AttributeColumns, TextColumn, textValueFilter, SelectColumn } from "@Obsidian/Controls/grid";
+import NotificationBox from "@Obsidian/Controls/notificationBox.obs";
+import Panel from "@Obsidian/Controls/panel.obs";
+import RockButton from "@Obsidian/Controls/rockButton.obs";
+import { AlertType } from "@Obsidian/Enums/Controls/alertType";
+import { BtnSize } from "@Obsidian/Enums/Controls/btnSize";
+import { BtnType } from "@Obsidian/Enums/Controls/btnType";
 import { ListBlockBox } from "@Obsidian/ViewModels/Blocks/listBlockBox";
 import { CareTypeListOptionsBag } from "./viewModels";
 import { GridDataBag } from "@Obsidian/ViewModels/Core/Grid/gridDataBag";
 import { NavigationUrlKey } from "./CareTypeList/types.partial";
-import { reactive, ref } from "vue";
+import { ref } from "vue";
+
+type CareTypeGridRow = {
+    idKey?: string | null;
+    name?: string | null;
+    description?: string | null;
+};
 
 const config = useConfigurationValues<ListBlockBox<CareTypeListOptionsBag>>();
 const invokeBlockAction = useInvokeBlockAction();
@@ -65,25 +81,31 @@ onConfigurationValuesChanged(useReloadBlock());
 
 // #region Values
 
-const gridDataSource = ref<Promise<GridDataBag>>();
-let gridData: GridDataBag | undefined;
+const careTypes = ref<CareTypeGridRow[]>([]);
+const isLoading = ref(true);
+const errorMessage = ref<string>();
 
 // #endregion
 
 // #region Functions
 
-/**
- * Called when the grid is requesting the row data be loaded.
- */
-async function loadGridData(): Promise<GridDataBag> {
-    const result = await invokeBlockAction<GridDataBag>("GetGridData");
+/** Loads the care type rows used by the tile list. */
+async function loadCareTypes(): Promise<void> {
+    try {
+        const result = await invokeBlockAction<GridDataBag>("GetGridData");
 
-    if (result.isSuccess && result.data) {
-        gridData = reactive(result.data);
-        return gridData;
+        if (result.isSuccess && result.data) {
+            careTypes.value = (result.data.rows ?? []) as CareTypeGridRow[];
+        }
+        else {
+            errorMessage.value = result.errorMessage ?? "Unknown error while trying to load care types.";
+        }
     }
-    else {
-        throw new Error(result.errorMessage ?? "Unknown error while trying to load grid data.");
+    catch (error) {
+        errorMessage.value = error instanceof Error ? error.message : "Unknown error while trying to load care types.";
+    }
+    finally {
+        isLoading.value = false;
     }
 }
 
@@ -129,5 +151,5 @@ function onSharedCareContactAttributesClick(): void {
 
 // #endregion
 
-gridDataSource.value = loadGridData();
+void loadCareTypes();
 </script>

@@ -2,6 +2,7 @@
 
 import { ListItemBag } from "@Obsidian/ViewModels/Utility/listItemBag";
 import { PublicAttributeBag } from "@Obsidian/ViewModels/Utility/publicAttributeBag";
+import { PublicEditableAttributeBag } from "@Obsidian/ViewModels/Utility/publicEditableAttributeBag";
 
 export type CareItemBag = {
     attributes?: Record<string, PublicAttributeBag> | null;
@@ -34,6 +35,10 @@ export type CareTypeBag = {
 
     attributeValues?: Record<string, string> | null;
 
+    canManageCareItemAttributes: boolean;
+
+    careItemAttributes?: CareItemAttributeBag[] | null;
+
     description?: string | null;
 
     idKey?: string | null;
@@ -41,6 +46,12 @@ export type CareTypeBag = {
     isActive: boolean;
 
     name?: string | null;
+};
+
+export type CareItemAttributeBag = {
+    attribute?: PublicEditableAttributeBag | null;
+
+    fieldType?: string | null;
 };
 
 export type CareTypeDetailOptionsBag = {

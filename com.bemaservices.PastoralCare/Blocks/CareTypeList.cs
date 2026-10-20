@@ -149,7 +149,6 @@ namespace com.bemaservices.PastoralCare.Blocks
                 .WithBlock( this )
                 .AddTextField( "idKey", a => a.IdKey )
                 .AddField( "description", a => a.Description )
-                .AddField( "name", a => a.Name )
                 .AddTextField( "name", a => a.Name )
                 .AddAttributeFields( GetGridAttributes() );
         }
